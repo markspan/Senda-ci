@@ -1,12 +1,8 @@
-name: Build liblsl for Android (arm64 only)
+name: Build liblsl for Android (arm64-v8a)
 
 on:
   workflow_dispatch:
     inputs:
-      ndk_version:
-        description: "Android NDK version. Use 'r14b' to match the app build, or a modern sdkmanager id like '26.1.10909125'."
-        required: false
-        default: "r14b"
       android_api:
         description: "Android API level"
         required: false
@@ -23,91 +19,112 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
+      # liblsl lives at repo root in ./liblsl (contains CMakeLists.txt)
       LIBLSL_DIR: liblsl
+
+      # Match the app build toolchain choices
       ANDROID_API: ${{ inputs.android_api || '24' }}
-      CMAKE_VERSION: "3.6.4111459"
-      ABI: "arm64-v8a"
-      NDK_INPUT: ${{ inputs.ndk_version || 'r14b' }}
+      ABI: arm64-v8a
+      CMAKE_VERSION: 3.6.4111459
+      NDK_DIRNAME: android-ndk-r14b
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK (required for sdkmanager)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install ncurses5 compatibility (needed for NDK r14b clang)
+      - name: Install ncurses5 compatibility (same fix as the app build)
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y libncurses5-compat
 
-      - name: Install CMake (pinned to app)
+      # sdkmanager (modern) requires Java 17+
+      - name: Set up JDK 17 (for sdkmanager)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Use the same approach as the app workflow: fresh SDK root + legacy cmdline-tools
+      - name: Install Android SDK (legacy cmdline-tools) + packages
         shell: bash
         run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager --install \
+          set -euxo pipefail
+
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+
+          curl -L -o cmdline-tools.zip \
+            "https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip"
+          unzip -q cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          rm cmdline-tools.zip
+
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+          # Accept licenses (avoid pipefail tripping on SIGPIPE from `yes`)
+          yes | sdkmanager --licenses || true
+
+          # Install the EXACT CMake package used by the app build
+          sdkmanager \
             "platform-tools" \
+            "platforms;android-${ANDROID_API}" \
             "cmake;${CMAKE_VERSION}"
 
-          echo "CMAKE_SDK_DIR=${ANDROID_SDK_ROOT}/cmake/${CMAKE_VERSION}" >> "$GITHUB_ENV"
-
-      - name: Install NDK (match app by default)
+      - name: Install Android NDK r14b
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
+          cd "$ANDROID_SDK_ROOT"
 
-          if [[ "${NDK_INPUT}" == "r14b" ]]; then
-            cd "${ANDROID_SDK_ROOT}"
-            curl -L -o ndk-r14b.zip "https://dl.google.com/android/repository/android-ndk-r14b-linux-x86_64.zip"
-            unzip -q ndk-r14b.zip
-            rm ndk-r14b.zip
-            echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/android-ndk-r14b" >> "$GITHUB_ENV"
-          else
-            yes | sdkmanager --licenses >/dev/null || true
-            sdkmanager --install "ndk;${NDK_INPUT}"
-            echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_INPUT}" >> "$GITHUB_ENV"
-          fi
+          curl -L -o ndk-r14b.zip "https://dl.google.com/android/repository/android-ndk-r14b-linux-x86_64.zip"
+          unzip -q ndk-r14b.zip
+          rm ndk-r14b.zip
 
-      - name: Build liblsl .so (arm64-v8a only)
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/${NDK_DIRNAME}" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/${NDK_DIRNAME}" >> "$GITHUB_ENV"
+
+      - name: Diagnostics (SDK/CMake/NDK)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-}"
+          echo "CMake SDK dir:"
+          ls -la "$ANDROID_SDK_ROOT/cmake" || true
+          echo "CMake version:"
+          "$ANDROID_SDK_ROOT/cmake/${CMAKE_VERSION}/bin/cmake" --version
+
+      - name: Build liblsl .so (arm64-v8a)
         shell: bash
         working-directory: ${{ env.LIBLSL_DIR }}
         run: |
           set -euo pipefail
 
+          # Force the same CMake as used by the app build
+          CMAKE_SDK_DIR="${ANDROID_SDK_ROOT}/cmake/${CMAKE_VERSION}"
           export PATH="${CMAKE_SDK_DIR}/bin:$PATH"
           which cmake
           cmake --version
 
           SRC_DIR="$(pwd)"
-          TOOLCHAIN="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
-
           echo "SRC_DIR=${SRC_DIR}"
+
+          TOOLCHAIN="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
           echo "Using NDK: ${ANDROID_NDK_HOME}"
-          test -f "${SRC_DIR}/CMakeLists.txt"
           test -f "$TOOLCHAIN"
 
-          OUT_SO_DIR="${SRC_DIR}/out-android-so"
-          rm -rf "$OUT_SO_DIR"
+          OUT_SO_DIR="${SRC_DIR}/out-android-so/${ABI}"
+          rm -rf "${SRC_DIR}/out-android-so"
           mkdir -p "$OUT_SO_DIR"
-
-          ABI="${ABI}"
-          echo "==== ABI: $ABI ===="
 
           BUILD_DIR="${SRC_DIR}/build-android-${ABI}"
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
-          # CMake 3.6 uses -H (source) and -B (build), NOT -S/-B
-          cmake -H"$SRC_DIR" -B"$BUILD_DIR" \
+          cmake -S "$SRC_DIR" -B "$BUILD_DIR" \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
@@ -120,19 +137,17 @@ jobs:
 
           SO_PATH="$(find "$BUILD_DIR" -type f -name "liblsl*.so" | head -n 1 || true)"
           if [[ -z "${SO_PATH}" ]]; then
-            echo "ERROR: No liblsl*.so found for ABI $ABI"
+            echo "ERROR: No liblsl*.so found for ABI ${ABI}"
             echo "Found .so files:"
             find "$BUILD_DIR" -type f -name "*.so" | head -n 200
             exit 1
           fi
 
-          DEST="${OUT_SO_DIR}/${ABI}"
-          mkdir -p "$DEST"
-          cp "$SO_PATH" "$DEST/liblsl.so"
-          echo "OK -> ${DEST}/liblsl.so"
+          cp "$SO_PATH" "$OUT_SO_DIR/liblsl.so"
+          echo "OK -> ${OUT_SO_DIR}/liblsl.so"
 
           echo "Final outputs:"
-          find "$OUT_SO_DIR" -type f -maxdepth 3 -print
+          find "${SRC_DIR}/out-android-so" -type f -maxdepth 3 -print
 
       - name: Package artifact (tar.gz)
         shell: bash
@@ -146,26 +161,27 @@ jobs:
             VER="sha-${GITHUB_SHA:0:7}"
           fi
 
-          tar -czf "dist/liblsl-android-${VER}-arm64.tar.gz" -C "${{ env.LIBLSL_DIR }}/out-android-so" .
+          tar -czf "dist/liblsl-android-${VER}.tar.gz" -C "liblsl/out-android-so" .
           ls -la dist
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: liblsl-android-arm64
+          name: liblsl-android
           path: dist/*.tar.gz
+          if-no-files-found: error
 
   release:
     if: github.ref_type == 'tag'
     needs: build-android
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: liblsl-android-arm64
+          name: liblsl-android
           path: dist
 
-      - name: Create GitHub Release (liblsl Android arm64)
+      - name: Create GitHub Release (liblsl Android)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
