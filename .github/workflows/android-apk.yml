@@ -36,7 +36,7 @@ jobs:
               "platform-tools" \
               "platforms;android-24" \
               "build-tools;26.0.2" \
-              "cmake;3.6.4111459" || true
+              "cmake;3.6.4111459"
               
       - name: Install Android NDK r14b
         shell: bash
@@ -70,6 +70,17 @@ jobs:
 
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Upload native build logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-logs
+          path: |
+            app/.externalNativeBuild/**/cmake_server_log.txt
+            app/.externalNativeBuild/**/CMakeOutput.log
+            app/.externalNativeBuild/**/CMakeError.log
+          if-no-files-found: ignore
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
