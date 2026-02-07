@@ -71,6 +71,19 @@ set (sources
 if(WIN32)
 	list(APPEND sources src/legacy/legacy_abi.cpp src/legacy/legacy_abi.h)
 endif()
+# ------------------------------------------------------------
+# Android: pthread symbols are in libc (bionic); there is no libpthread
+# Prevent CMake/FindThreads/Boost from adding "-lpthread"
+# ------------------------------------------------------------
+if(ANDROID)
+	set(THREADS_PTHREAD_ARG "" CACHE STRING "Do not pass -pthread/-lpthread on Android" FORCE)
+	set(CMAKE_THREAD_LIBS_INIT "" CACHE STRING "No separate pthread library on Android" FORCE)
+
+	# Hint FindThreads results
+	set(CMAKE_HAVE_THREADS_LIBRARY 1 CACHE INTERNAL "" FORCE)
+	set(CMAKE_USE_PTHREADS_INIT 1 CACHE INTERNAL "" FORCE)
+	set(CMAKE_USE_WIN32_THREADS_INIT 0 CACHE INTERNAL "" FORCE)
+endif()
 
 set(headers
 	include/lsl_c.h
