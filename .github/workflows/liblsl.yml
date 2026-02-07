@@ -75,7 +75,7 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
 
-      - name: Build liblsl (arm64-v8a)
+      - name: Build liblsl (arm64-v8a) + diagnostics + dummy libpthread
         shell: bash
         run: |
           set -euo pipefail
@@ -107,66 +107,85 @@ jobs:
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
-          # Configure (classic style for this old SDK CMake)
+          echo "---- ldd clang++ (ncurses/tinfo) ----"
+          ldd "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" | grep -E 'ncurses|tinfo' || true
+
+          # -------------------------------------------------------------------
+          # Dummy libpthread shim
+          # -------------------------------------------------------------------
+          # NDK r14b toolchain/ld sometimes tries to link -lpthread even though
+          # Android has pthread in libc. We provide an empty libpthread.a so
+          # -lpthread is satisfied and symbols still resolve from libc.
+          DUMMY_DIR="${BUILD_DIR}/dummy-libs"
+          mkdir -p "$DUMMY_DIR"
+          echo "int __dummy_pthread(void){return 0;}" > "${DUMMY_DIR}/pthread_dummy.c"
+          "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" \
+            --target=aarch64-none-linux-android \
+            --sysroot="${ANDROID_NDK_HOME}/platforms/android-${ANDROID_API}/arch-arm64" \
+            -c "${DUMMY_DIR}/pthread_dummy.c" -o "${DUMMY_DIR}/pthread_dummy.o"
+          ar rcs "${DUMMY_DIR}/libpthread.a" "${DUMMY_DIR}/pthread_dummy.o"
+          ls -la "$DUMMY_DIR"
+
+          # IMPORTANT: CMake 3.6 (rc2) in the Android SDK is unreliable with -S/-B.
+          # Use classic "cd build && cmake <src>" style.
           pushd "$BUILD_DIR" >/dev/null
+
           cmake "$SRC_DIR" \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
-            -DCMAKE_BUILD_TYPE=Release
-          popd >/dev/null
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SHARED_LINKER_FLAGS="-L${DUMMY_DIR}" \
+            -DCMAKE_MODULE_LINKER_FLAGS="-L${DUMMY_DIR}" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L${DUMMY_DIR}"
 
-          # Pre-build diagnostics: where pthread will come from in generated build files
-          echo "---- grep pthread in build tree (pre-build) ----"
-          grep -R --line-number -E '(^| )-lpthread( |$)|(^| )pthread( |$)|Threads::Threads' "$BUILD_DIR" | head -n 200 || true
-
-          # Build, but do NOT abort immediately on failure; we want post-fail diagnostics
+          # Run build but DON'T abort the script here; we want post-mortem diagnostics.
           set +e
-          pushd "$BUILD_DIR" >/dev/null
           cmake --build . -- -j"$(nproc)"
-          rc=$?
-          popd >/dev/null
+          BUILD_RC=$?
           set -e
 
-          # Post-build diagnostics (will run even if link fails)
-          echo "---- link.txt (lsl target): grep pthread ----"
-          grep -n -E 'pthread|Threads::Threads|-lpthread' "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" || true
+          popd >/dev/null
 
-          echo "---- link.txt (lsl target): first 200 args (one per line) ----"
-          tr ' ' '\n' < "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" | nl -ba | sed -n '1,200p' || true
+          echo "Build exit code: $BUILD_RC"
 
-          echo "---- link.txt (lsl target): last 200 args (one per line) ----"
-          tr ' ' '\n' < "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" | nl -ba | tail -n 200 || true
+          echo "---- link.txt (lsl target) ----"
+          sed -n '1,200p' "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" || true
 
-          echo "---- lslboost link.txt (if present): grep pthread ----"
-          if [[ -f "$BUILD_DIR/external/CMakeFiles/lslboost.dir/link.txt" ]]; then
-            grep -n -E 'pthread|Threads::Threads|-lpthread' "$BUILD_DIR/external/CMakeFiles/lslboost.dir/link.txt" || true
-          else
-            echo "(no lslboost link.txt found at expected path)"
+          echo "---- link.txt (tail) ----"
+          tail -n 50 "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" || true
+
+          echo "---- link.txt (split) ----"
+          tr ' ' '\n' < "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" | sed -n '1,200p' || true
+
+          echo "---- grep pthread in build tree ----"
+          grep -R --line-number -E '(^| )-lpthread( |$)|(^| )pthread( |$)|Threads::Threads' "$BUILD_DIR" | head -n 200 || true
+
+          echo "---- CMakeCache Threads summary ----"
+          grep -nE 'THREAD|PTHREAD|Threads|CMAKE_HAVE_THREADS_LIBRARY|CMAKE_THREAD_LIBS_INIT' "$BUILD_DIR/CMakeCache.txt" || true
+
+          # If build succeeded, package the .so into out-android-so
+          if [[ "$BUILD_RC" -eq 0 ]]; then
+            OUT_SO_DIR="${SRC_DIR}/out-android-so/${ABI}"
+            rm -rf "${SRC_DIR}/out-android-so"
+            mkdir -p "$OUT_SO_DIR"
+
+            SO_PATH="$(find "$BUILD_DIR" -type f -name "liblsl*.so" | head -n 1 || true)"
+            if [[ -z "${SO_PATH}" ]]; then
+              echo "ERROR: Build succeeded but no liblsl*.so found."
+              find "$BUILD_DIR" -type f -name "*.so" | head -n 200
+              exit 1
+            fi
+
+            cp "$SO_PATH" "$OUT_SO_DIR/liblsl.so"
+            echo "OK -> $OUT_SO_DIR/liblsl.so"
+            find "${SRC_DIR}/out-android-so" -type f -maxdepth 3 -print
           fi
 
-          # If build failed, fail the step now (after diagnostics)
-          if [[ $rc -ne 0 ]]; then
-            echo "Build failed with exit code $rc"
-            exit $rc
-          fi
-
-          OUT_SO_DIR="${SRC_DIR}/out-android-so/${ABI}"
-          rm -rf "${SRC_DIR}/out-android-so"
-          mkdir -p "$OUT_SO_DIR"
-
-          SO_PATH="$(find "$BUILD_DIR" -type f -name "liblsl*.so" | head -n 1 || true)"
-          if [[ -z "${SO_PATH}" ]]; then
-            echo "ERROR: No liblsl*.so found."
-            find "$BUILD_DIR" -type f -name "*.so" | head -n 200
-            exit 1
-          fi
-
-          cp "$SO_PATH" "$OUT_SO_DIR/liblsl.so"
-          echo "OK -> $OUT_SO_DIR/liblsl.so"
-          find "${SRC_DIR}/out-android-so" -type f -maxdepth 3 -print
+          exit "$BUILD_RC"
 
       - name: Package artifact (tar.gz)
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
@@ -188,6 +207,7 @@ jobs:
           ls -la dist
 
       - name: Upload build artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: liblsl-android-arm64
