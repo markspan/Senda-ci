@@ -104,8 +104,10 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          export PATH="$ANDROID_SDK_ROOT/cmake/3.6.4111459/bin:$PATH"
+          which cmake
+          cmake --version
           ./gradlew :app:assembleDebug --stacktrace --info --no-daemon 2>&1 | tee gradle-build.log
-
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
