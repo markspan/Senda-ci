@@ -31,12 +31,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ncurses5 compatibility (same fix as the app build)
+      - name: Install ncurses5 compatibility (needed by NDK r14b clang)
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y libncurses5-compat
+
+          # First try native .so.5 packages (may or may not exist on the runner image)
+          if sudo apt-get install -y libncurses5 libtinfo5; then
+            echo "Installed libncurses5/libtinfo5."
+            exit 0
+          fi
+
+          # Fallback: install ncurses6 and provide libncurses.so.5 + libtinfo.so.5 via symlinks
+          sudo apt-get install -y libncurses6 libtinfo6
+
+          LIBDIR="/usr/lib/x86_64-linux-gnu"
+          sudo ln -sf "${LIBDIR}/libncurses.so.6" "${LIBDIR}/libncurses.so.5"
+          sudo ln -sf "${LIBDIR}/libtinfo.so.6"   "${LIBDIR}/libtinfo.so.5"
+
+          ls -la "${LIBDIR}/libncurses.so."* "${LIBDIR}/libtinfo.so."*
 
       # sdkmanager (modern) requires Java 17+
       - name: Set up JDK 17 (for sdkmanager)
