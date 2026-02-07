@@ -109,9 +109,20 @@ if (LSL_USE_SYSTEM_BOOST)
 else ()
 	add_subdirectory (external)
 	set(LSL_BOOST_LIBS "lslboost")
-	# --------------------------------
-	
-	# --------------------------------
+	# ------------------------------------------------------------
+	# Android + old toolchains: some boost/cmake setups still inject -lpthread.
+	# Strip it from the lslboost target so it doesn't propagate into liblsl.
+	# ------------------------------------------------------------
+	if(ANDROID AND TARGET lslboost)
+		foreach(_prop LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+			get_target_property(_libs lslboost ${_prop})
+			if(_libs)
+				# Remove common pthread spellings / CMake threads target
+				list(REMOVE_ITEM _libs pthread -lpthread Threads::Threads)
+				set_target_properties(lslboost PROPERTIES ${_prop} "${_libs}")
+			endif()
+		endforeach()
+	endif()
 endif ()
 
 # common definitions for the lsllib variants
@@ -131,6 +142,15 @@ endfunction()
 # shared library
 add_library(${target} SHARED ${sources} ${headers})
 lsllib_properties(${target})
+if(ANDROID)
+	foreach(_prop LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+		get_target_property(_libs ${target} ${_prop})
+		if(_libs)
+			list(REMOVE_ITEM _libs pthread -lpthread Threads::Threads)
+			set_target_properties(${target} PROPERTIES ${_prop} "${_libs}")
+		endif()
+	endforeach()
+endif()
 set_target_properties(${target} PROPERTIES
 	PREFIX "lib"
 	OUTPUT_NAME "${target}${lslplatform}"
