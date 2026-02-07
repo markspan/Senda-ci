@@ -1,0 +1,151 @@
+name: Build liblsl for Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      ndk_version:
+        description: "Android NDK version (sdkmanager id version)"
+        required: false
+        default: "26.1.10909125"
+      android_api:
+        description: "Android API level"
+        required: false
+        default: "24"
+  push:
+    tags:
+      - "liblsl-android-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    env:
+      LIBLSL_DIR: liblsl
+      NDK_VERSION: ${{ inputs.ndk_version || '26.1.10909125' }}
+      ANDROID_API: ${{ inputs.android_api || '24' }}
+      ABIS: "arm64-v8a armeabi-v7a x86_64"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK (required for sdkmanager)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK + CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
+            "platform-tools" \
+            "ndk;${NDK_VERSION}" \
+            "cmake;3.22.1"
+
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          echo "Installed NDKs:"
+          ls -la "${ANDROID_SDK_ROOT}/ndk" || true
+
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build liblsl .so for ABIs
+        shell: bash
+        working-directory: ${{ env.LIBLSL_DIR }}
+        run: |
+          set -euo pipefail
+
+          SRC_DIR="$(pwd)"
+          TOOLCHAIN="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
+
+          echo "Using NDK: ${ANDROID_NDK_HOME}"
+          test -f "$TOOLCHAIN"
+
+          OUT_SO_DIR="${SRC_DIR}/out-android-so"
+          rm -rf "$OUT_SO_DIR"
+          mkdir -p "$OUT_SO_DIR"
+
+          for ABI in $ABIS; do
+            echo "==== ABI: $ABI ===="
+
+            BUILD_DIR="${SRC_DIR}/build-android-${ABI}"
+            rm -rf "$BUILD_DIR"
+            mkdir -p "$BUILD_DIR"
+
+            cmake -S "$SRC_DIR" -B "$BUILD_DIR" \
+              -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
+              -DANDROID_ABI="$ABI" \
+              -DANDROID_PLATFORM="android-${ANDROID_API}" \
+              -DANDROID_STL="c++_shared" \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DLSL_USE_SYSTEM_BOOST=OFF \
+              -DLSL_BUILD_STATIC=OFF
+
+            cmake --build "$BUILD_DIR" -j
+
+            # Your CMake emits liblsl64.so on 64-bit and liblsl32.so on 32-bit.
+            SO_PATH="$(find "$BUILD_DIR" -type f -name "liblsl*.so" | head -n 1 || true)"
+            if [[ -z "${SO_PATH}" ]]; then
+              echo "ERROR: No liblsl*.so found for ABI $ABI"
+              echo "Found .so files:"
+              find "$BUILD_DIR" -type f -name "*.so" | head -n 200
+              exit 1
+            fi
+
+            DEST="${OUT_SO_DIR}/${ABI}"
+            mkdir -p "$DEST"
+            cp "$SO_PATH" "$DEST/liblsl.so"
+
+            echo "OK -> ${DEST}/liblsl.so"
+          done
+
+          echo "Final outputs:"
+          find "$OUT_SO_DIR" -type f -maxdepth 2 -print
+
+      - name: Package artifact (tar.gz)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          # Include a version derived from tag if present, else use short SHA
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VER="${GITHUB_REF_NAME}"
+          else
+            VER="sha-${GITHUB_SHA:0:7}"
+          fi
+
+          tar -czf "dist/liblsl-android-${VER}.tar.gz" -C "liblsl/out-android-so" .
+          ls -la dist
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: liblsl-android
+          path: dist/*.tar.gz
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build-android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: liblsl-android
+          path: dist
+
+      - name: Create GitHub Release (liblsl Android)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
