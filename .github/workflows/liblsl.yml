@@ -30,7 +30,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libncurses5 libtinfo5
 
-      # sdkmanager (modern) requires Java 17+
       - name: Set up JDK 17 (for sdkmanager)
         uses: actions/setup-java@v4
         with:
@@ -108,13 +107,25 @@ jobs:
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
-          # CMake 3.6 in the Android SDK is unreliable with -S/-B. Use classic style.
+          # IMPORTANT: CMake 3.6 (rc2) in the Android SDK is unreliable with -S/-B.
+          # Use classic "cd build && cmake <src>" style.
           pushd "$BUILD_DIR" >/dev/null
           cmake "$SRC_DIR" \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
             -DCMAKE_BUILD_TYPE=Release
+          popd >/dev/null
+
+          # ---- diagnostics: show who injects -lpthread ----
+          echo "---- link.txt (lsl target) ----"
+          sed -n '1,200p' "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" || true
+
+          echo "---- grep pthread in build tree ----"
+          grep -R --line-number -E '(^| )-lpthread( |$)|(^| )pthread( |$)|Threads::Threads' "$BUILD_DIR" | head -n 200 || true
+
+          # Build (CMake 3.6 doesn't support "-j" directly; pass it to the native tool)
+          pushd "$BUILD_DIR" >/dev/null
           cmake --build . -- -j"$(nproc)"
           popd >/dev/null
 
