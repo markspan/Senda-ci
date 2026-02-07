@@ -129,11 +129,21 @@ jobs:
           set -e
 
           # Post-build diagnostics (will run even if link fails)
-          echo "---- link.txt (lsl target) ----"
-          sed -n '1,200p' "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" || true
+          echo "---- link.txt (lsl target): grep pthread ----"
+          grep -n -E 'pthread|Threads::Threads|-lpthread' "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" || true
 
-          echo "---- grep pthread in build tree (post-build) ----"
-          grep -R --line-number -E '(^| )-lpthread( |$)|(^| )pthread( |$)|Threads::Threads' "$BUILD_DIR" | head -n 200 || true
+          echo "---- link.txt (lsl target): first 200 args (one per line) ----"
+          tr ' ' '\n' < "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" | nl -ba | sed -n '1,200p' || true
+
+          echo "---- link.txt (lsl target): last 200 args (one per line) ----"
+          tr ' ' '\n' < "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" | nl -ba | tail -n 200 || true
+
+          echo "---- lslboost link.txt (if present): grep pthread ----"
+          if [[ -f "$BUILD_DIR/external/CMakeFiles/lslboost.dir/link.txt" ]]; then
+            grep -n -E 'pthread|Threads::Threads|-lpthread' "$BUILD_DIR/external/CMakeFiles/lslboost.dir/link.txt" || true
+          else
+            echo "(no lslboost link.txt found at expected path)"
+          fi
 
           # If build failed, fail the step now (after diagnostics)
           if [[ $rc -ne 0 ]]; then
