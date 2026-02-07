@@ -44,15 +44,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
+
+          # Avoid workflow failing on SIGPIPE when sdkmanager exits early.
+          yes | sdkmanager --licenses >/dev/null || true
+
           sdkmanager --install \
             "platform-tools" \
             "ndk;${NDK_VERSION}" \
             "cmake;3.22.1"
-
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
-          echo "Installed NDKs:"
-          ls -la "${ANDROID_SDK_ROOT}/ndk" || true
 
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
@@ -64,8 +63,6 @@ jobs:
 
           SRC_DIR="$(pwd)"
           TOOLCHAIN="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
-
-          echo "Using NDK: ${ANDROID_NDK_HOME}"
           test -f "$TOOLCHAIN"
 
           OUT_SO_DIR="${SRC_DIR}/out-android-so"
@@ -90,11 +87,9 @@ jobs:
 
             cmake --build "$BUILD_DIR" -j
 
-            # Your CMake emits liblsl64.so on 64-bit and liblsl32.so on 32-bit.
             SO_PATH="$(find "$BUILD_DIR" -type f -name "liblsl*.so" | head -n 1 || true)"
             if [[ -z "${SO_PATH}" ]]; then
               echo "ERROR: No liblsl*.so found for ABI $ABI"
-              echo "Found .so files:"
               find "$BUILD_DIR" -type f -name "*.so" | head -n 200
               exit 1
             fi
@@ -102,20 +97,36 @@ jobs:
             DEST="${OUT_SO_DIR}/${ABI}"
             mkdir -p "$DEST"
             cp "$SO_PATH" "$DEST/liblsl.so"
-
             echo "OK -> ${DEST}/liblsl.so"
           done
 
           echo "Final outputs:"
           find "$OUT_SO_DIR" -type f -maxdepth 2 -print
 
-      - name: Package artifact (tar.gz)
+      - name: Prepare Android jniLibs layout
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # This is the structure Gradle expects.
+          JNILIBS_DIR="jniLibs"
+          rm -rf "$JNILIBS_DIR"
+          mkdir -p "$JNILIBS_DIR"
+
+          for ABI in $ABIS; do
+            mkdir -p "${JNILIBS_DIR}/${ABI}"
+            cp "liblsl/out-android-so/${ABI}/liblsl.so" "${JNILIBS_DIR}/${ABI}/liblsl.so"
+          done
+
+          echo "jniLibs contents:"
+          find "$JNILIBS_DIR" -type f -print
+
+      - name: Package artifacts (tar.gz + jniLibs zip)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
-          # Include a version derived from tag if present, else use short SHA
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             VER="${GITHUB_REF_NAME}"
           else
@@ -123,13 +134,15 @@ jobs:
           fi
 
           tar -czf "dist/liblsl-android-${VER}.tar.gz" -C "liblsl/out-android-so" .
+          (cd jniLibs && zip -r "../dist/jniLibs-liblsl-${VER}.zip" .)
+
           ls -la dist
 
-      - name: Upload build artifact
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: liblsl-android
-          path: dist/*.tar.gz
+          path: dist/*
 
   release:
     if: github.ref_type == 'tag'
@@ -148,4 +161,4 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            dist/*.tar.gz
+            dist/*
