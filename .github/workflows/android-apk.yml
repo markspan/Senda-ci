@@ -14,19 +14,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # >>> ADD THIS (fix for: libncurses.so.5 missing with NDK r14b clang) <<<
       - name: Install system deps for old NDK (libncurses.so.5)
         shell: bash
         run: |
           set -euxo pipefail
           sudo apt-get update
-          # ubuntu-latest may be 22.04/24.04; prefer compat package when available
-          if apt-cache show libncurses5-compat >/dev/null 2>&1; then
-            sudo apt-get install -y libncurses5-compat
-          else
-            sudo apt-get install -y libncurses5 libtinfo5
-          fi
-      # >>> END ADD <<<
+          sudo apt-get install -y libncurses5 libtinfo5
 
       # sdkmanager (modern) requires Java 17+
       - name: Set up JDK 17 (for sdkmanager)
@@ -35,7 +28,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # FIX A: Fresh Android SDK root + legacy cmdline-tools
+      # Fresh Android SDK root + legacy cmdline-tools
       - name: Install Android SDK (legacy cmdline-tools) + packages
         shell: bash
         run: |
@@ -54,10 +47,8 @@ jobs:
 
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
-          # Accept licenses (avoid pipefail tripping on SIGPIPE from `yes`)
           yes | sdkmanager --licenses || true
 
-          # Install EXACT packages matching your project
           sdkmanager \
             "platform-tools" \
             "platforms;android-24" \
@@ -85,7 +76,7 @@ jobs:
           ndk.dir=$ANDROID_SDK_ROOT/android-ndk-r14b
           cmake.dir=$ANDROID_SDK_ROOT/cmake/3.6.4111459
           EOF
-          
+
       # AGP 3.0.1 + Gradle 4.1 wants Java 8 for the build itself.
       - name: Set up JDK 8 (for Gradle build)
         uses: actions/setup-java@v4
@@ -108,11 +99,7 @@ jobs:
           ls -la "$ANDROID_SDK_ROOT/cmake" || true
           find "$ANDROID_SDK_ROOT/cmake" -maxdepth 4 -type f -name cmake -print || true
 
-          echo "System cmake:"
-          which cmake || true
-          cmake --version || true
-
-          echo "NDK clang deps (sanity):"
+          echo "Check NDK clang deps:"
           ldd "$ANDROID_SDK_ROOT/android-ndk-r14b/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" | grep -E 'ncurses|tinfo' || true
 
       - name: Gradle wrapper executable
