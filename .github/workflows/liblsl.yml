@@ -46,7 +46,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Accept licenses without failing the step on SIGPIPE/pipefail weirdness
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager --install \
             "platform-tools" \
@@ -71,16 +70,12 @@ jobs:
             echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_INPUT}" >> "$GITHUB_ENV"
           fi
 
-          echo "ANDROID_NDK_HOME will be:"
-          cat "$GITHUB_ENV" | tail -n 5
-
       - name: Build liblsl .so (arm64-v8a only)
         shell: bash
         working-directory: ${{ env.LIBLSL_DIR }}
         run: |
           set -euo pipefail
 
-          # Force the same CMake as used by the app build
           export PATH="${CMAKE_SDK_DIR}/bin:$PATH"
           which cmake
           cmake --version
@@ -104,7 +99,8 @@ jobs:
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
-          cmake -S "$SRC_DIR" -B "$BUILD_DIR" \
+          # CMake 3.6 uses -H (source) and -B (build), NOT -S/-B
+          cmake -H"$SRC_DIR" -B"$BUILD_DIR" \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
