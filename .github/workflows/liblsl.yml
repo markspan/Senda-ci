@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   build-android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     env:
       LIBLSL_DIR: liblsl
@@ -41,6 +41,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Install ncurses5 compatibility (needed for NDK r14b clang)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libncurses5-compat
 
       - name: Install CMake (pinned to app)
         shell: bash
