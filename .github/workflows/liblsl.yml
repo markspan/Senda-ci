@@ -115,7 +115,7 @@ jobs:
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
             -DCMAKE_BUILD_TYPE=Release
-          cmake --build . -j
+          cmake --build . -- -j"$(nproc)"
           popd >/dev/null
 
           OUT_SO_DIR="${SRC_DIR}/out-android-so/${ABI}"
