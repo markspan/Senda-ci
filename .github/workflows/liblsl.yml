@@ -27,6 +27,7 @@ jobs:
       NDK_VERSION: ${{ inputs.ndk_version || '26.1.10909125' }}
       ANDROID_API: ${{ inputs.android_api || '24' }}
       ABIS: "arm64-v8a armeabi-v7a x86_64"
+      CMAKE_VERSION: "3.6.4111459"
 
     steps:
       - uses: actions/checkout@v4
@@ -40,20 +41,25 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install NDK + CMake
+      - name: Install NDK + pinned CMake
         shell: bash
         run: |
           set -euo pipefail
 
-          # Avoid workflow failing on SIGPIPE when sdkmanager exits early.
+          # Avoid CI failing on SIGPIPE / non-zero during license accept
           yes | sdkmanager --licenses >/dev/null || true
 
           sdkmanager --install \
             "platform-tools" \
             "ndk;${NDK_VERSION}" \
-            "cmake;3.22.1"
+            "cmake;${CMAKE_VERSION}"
+
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          echo "Installed NDKs:"
+          ls -la "${ANDROID_SDK_ROOT}/ndk" || true
 
           echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          echo "CMAKE_SDK_DIR=${ANDROID_SDK_ROOT}/cmake/${CMAKE_VERSION}" >> "$GITHUB_ENV"
 
       - name: Build liblsl .so for ABIs
         shell: bash
@@ -61,8 +67,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Force the same CMake as used by the app build
+          export PATH="${CMAKE_SDK_DIR}/bin:$PATH"
+          which cmake
+          cmake --version
+
           SRC_DIR="$(pwd)"
           TOOLCHAIN="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
+
+          echo "Using NDK: ${ANDROID_NDK_HOME}"
           test -f "$TOOLCHAIN"
 
           OUT_SO_DIR="${SRC_DIR}/out-android-so"
@@ -87,9 +100,11 @@ jobs:
 
             cmake --build "$BUILD_DIR" -j
 
+            # Your CMake emits liblsl64.so on 64-bit and liblsl32.so on 32-bit.
             SO_PATH="$(find "$BUILD_DIR" -type f -name "liblsl*.so" | head -n 1 || true)"
             if [[ -z "${SO_PATH}" ]]; then
               echo "ERROR: No liblsl*.so found for ABI $ABI"
+              echo "Found .so files:"
               find "$BUILD_DIR" -type f -name "*.so" | head -n 200
               exit 1
             fi
@@ -97,36 +112,20 @@ jobs:
             DEST="${OUT_SO_DIR}/${ABI}"
             mkdir -p "$DEST"
             cp "$SO_PATH" "$DEST/liblsl.so"
+
             echo "OK -> ${DEST}/liblsl.so"
           done
 
           echo "Final outputs:"
           find "$OUT_SO_DIR" -type f -maxdepth 2 -print
 
-      - name: Prepare Android jniLibs layout
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # This is the structure Gradle expects.
-          JNILIBS_DIR="jniLibs"
-          rm -rf "$JNILIBS_DIR"
-          mkdir -p "$JNILIBS_DIR"
-
-          for ABI in $ABIS; do
-            mkdir -p "${JNILIBS_DIR}/${ABI}"
-            cp "liblsl/out-android-so/${ABI}/liblsl.so" "${JNILIBS_DIR}/${ABI}/liblsl.so"
-          done
-
-          echo "jniLibs contents:"
-          find "$JNILIBS_DIR" -type f -print
-
-      - name: Package artifacts (tar.gz + jniLibs zip)
+      - name: Package artifact (tar.gz)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
 
+          # Include a version derived from tag if present, else use short SHA
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             VER="${GITHUB_REF_NAME}"
           else
@@ -134,15 +133,13 @@ jobs:
           fi
 
           tar -czf "dist/liblsl-android-${VER}.tar.gz" -C "liblsl/out-android-so" .
-          (cd jniLibs && zip -r "../dist/jniLibs-liblsl-${VER}.zip" .)
-
           ls -la dist
 
-      - name: Upload build artifacts
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: liblsl-android
-          path: dist/*
+          path: dist/*.tar.gz
 
   release:
     if: github.ref_type == 'tag'
@@ -161,4 +158,4 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            dist/*
+            dist/*.tar.gz
