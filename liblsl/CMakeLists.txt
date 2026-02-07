@@ -97,20 +97,7 @@ else ()
 	add_subdirectory (external)
 	set(LSL_BOOST_LIBS "lslboost")
 	# --------------------------------
-		add_subdirectory (external)
-	set(LSL_BOOST_LIBS "lslboost")
-
-	# Android (NDK r14b): pthread is part of bionic/libc; there is no standalone -lpthread
-	if(ANDROID AND TARGET lslboost)
-		foreach(prop LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
-			get_target_property(_tlibs lslboost ${prop})
-			if(_tlibs)
-				list(REMOVE_ITEM _tlibs pthread -lpthread)
-				set_target_properties(lslboost PROPERTIES ${prop} "${_tlibs}")
-			endif()
-		endforeach()
-	endif()
-
+	
 	# --------------------------------
 endif ()
 
