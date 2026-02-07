@@ -63,14 +63,15 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
 
-      - name: Create local.properties (sdk.dir + ndk.dir)
+      - name: Create local.properties (sdk.dir + ndk.dir + cmake.dir)
         shell: bash
         run: |
           cat > local.properties <<EOF
           sdk.dir=$ANDROID_SDK_ROOT
           ndk.dir=$ANDROID_SDK_ROOT/android-ndk-r14b
+          cmake.dir=$ANDROID_SDK_ROOT/cmake/3.6.4111459
           EOF
-
+          
       # AGP 3.0.1 + Gradle 4.1 wants Java 8 for the build itself.
       - name: Set up JDK 8 (for Gradle build)
         uses: actions/setup-java@v4
@@ -104,6 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          unset ANDROID_NDK ANDROID_NDK_ROOT ANDROID_NDK_LATEST_HOME
           export PATH="$ANDROID_SDK_ROOT/cmake/3.6.4111459/bin:$PATH"
           which cmake
           cmake --version
