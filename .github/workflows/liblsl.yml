@@ -2,11 +2,6 @@ name: Build liblsl for Android (arm64-v8a)
 
 on:
   workflow_dispatch:
-    inputs:
-      android_api:
-        description: "Android API level"
-        required: false
-        default: "24"
   push:
     tags:
       - "liblsl-android-v*"
@@ -19,38 +14,21 @@ jobs:
     runs-on: ubuntu-22.04
 
     env:
-      # liblsl lives at repo root in ./liblsl (contains CMakeLists.txt)
-      LIBLSL_DIR: liblsl
-
-      # Match the app build toolchain choices
-      ANDROID_API: ${{ inputs.android_api || '24' }}
-      ABI: arm64-v8a
-      CMAKE_VERSION: 3.6.4111459
-      NDK_DIRNAME: android-ndk-r14b
+      ANDROID_API: "24"
+      ABI: "arm64-v8a"
+      CMAKE_VERSION: "3.6.4111459"
+      NDK_DIRNAME: "android-ndk-r14b"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install ncurses5 compatibility (needed by NDK r14b clang)
+      - name: Install system deps for old NDK (libncurses.so.5)
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           sudo apt-get update
-
-          # First try native .so.5 packages (may or may not exist on the runner image)
-          if sudo apt-get install -y libncurses5 libtinfo5; then
-            echo "Installed libncurses5/libtinfo5."
-            exit 0
-          fi
-
-          # Fallback: install ncurses6 and provide libncurses.so.5 + libtinfo.so.5 via symlinks
-          sudo apt-get install -y libncurses6 libtinfo6
-
-          LIBDIR="/usr/lib/x86_64-linux-gnu"
-          sudo ln -sf "${LIBDIR}/libncurses.so.6" "${LIBDIR}/libncurses.so.5"
-          sudo ln -sf "${LIBDIR}/libtinfo.so.6"   "${LIBDIR}/libtinfo.so.5"
-
-          ls -la "${LIBDIR}/libncurses.so."* "${LIBDIR}/libtinfo.so."*
+          sudo apt-get install -y libncurses5 libtinfo5
 
       # sdkmanager (modern) requires Java 17+
       - name: Set up JDK 17 (for sdkmanager)
@@ -59,7 +37,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # Use the same approach as the app workflow: fresh SDK root + legacy cmdline-tools
       - name: Install Android SDK (legacy cmdline-tools) + packages
         shell: bash
         run: |
@@ -78,10 +55,9 @@ jobs:
 
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
 
-          # Accept licenses (avoid pipefail tripping on SIGPIPE from `yes`)
-          yes | sdkmanager --licenses || true
+          # Hide the license text (keep it non-fatal)
+          yes | sdkmanager --licenses > /dev/null || true
 
-          # Install the EXACT CMake package used by the app build
           sdkmanager \
             "platform-tools" \
             "platforms;android-${ANDROID_API}" \
@@ -105,34 +81,40 @@ jobs:
         run: |
           set -euxo pipefail
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-}"
-          echo "CMake SDK dir:"
-          ls -la "$ANDROID_SDK_ROOT/cmake" || true
-          echo "CMake version:"
-          "$ANDROID_SDK_ROOT/cmake/${CMAKE_VERSION}/bin/cmake" --version
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          echo "CMake dir: $ANDROID_SDK_ROOT/cmake/${CMAKE_VERSION}"
+          ldd "$ANDROID_SDK_ROOT/${NDK_DIRNAME}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" | grep -E 'ncurses|tinfo' || true
 
-      - name: Build liblsl .so (arm64-v8a)
+      - name: Build liblsl (arm64-v8a)
         shell: bash
-        working-directory: ${{ env.LIBLSL_DIR }}
         run: |
           set -euo pipefail
 
           # Force the same CMake as used by the app build
-          CMAKE_SDK_DIR="${ANDROID_SDK_ROOT}/cmake/${CMAKE_VERSION}"
+          export CMAKE_SDK_DIR="$ANDROID_SDK_ROOT/cmake/${CMAKE_VERSION}"
           export PATH="${CMAKE_SDK_DIR}/bin:$PATH"
           which cmake
           cmake --version
 
-          SRC_DIR="$(pwd)"
-          echo "SRC_DIR=${SRC_DIR}"
+          # Your repo may have the CMakeLists here:
+          # - senda/liblsl/CMakeLists.txt   (you said this is the case)
+          # - liblsl/CMakeLists.txt         (fallback)
+          if [[ -f "$GITHUB_WORKSPACE/senda/liblsl/CMakeLists.txt" ]]; then
+            SRC_DIR="$GITHUB_WORKSPACE/senda/liblsl"
+          elif [[ -f "$GITHUB_WORKSPACE/liblsl/CMakeLists.txt" ]]; then
+            SRC_DIR="$GITHUB_WORKSPACE/liblsl"
+          else
+            echo "ERROR: Can't find CMakeLists.txt in senda/liblsl or liblsl."
+            find "$GITHUB_WORKSPACE" -maxdepth 4 -name CMakeLists.txt -print
+            exit 1
+          fi
+
+          echo "SRC_DIR=$SRC_DIR"
+          ls -la "$SRC_DIR"
+          test -f "$SRC_DIR/CMakeLists.txt"
 
           TOOLCHAIN="${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake"
-          echo "Using NDK: ${ANDROID_NDK_HOME}"
           test -f "$TOOLCHAIN"
-
-          OUT_SO_DIR="${SRC_DIR}/out-android-so/${ABI}"
-          rm -rf "${SRC_DIR}/out-android-so"
-          mkdir -p "$OUT_SO_DIR"
 
           BUILD_DIR="${SRC_DIR}/build-android-${ABI}"
           rm -rf "$BUILD_DIR"
@@ -142,25 +124,23 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
-            -DANDROID_STL="c++_shared" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLSL_USE_SYSTEM_BOOST=OFF \
-            -DLSL_BUILD_STATIC=OFF
+            -DCMAKE_BUILD_TYPE=Release
 
           cmake --build "$BUILD_DIR" -j
 
+          OUT_SO_DIR="${SRC_DIR}/out-android-so/${ABI}"
+          rm -rf "${SRC_DIR}/out-android-so"
+          mkdir -p "$OUT_SO_DIR"
+
           SO_PATH="$(find "$BUILD_DIR" -type f -name "liblsl*.so" | head -n 1 || true)"
           if [[ -z "${SO_PATH}" ]]; then
-            echo "ERROR: No liblsl*.so found for ABI ${ABI}"
-            echo "Found .so files:"
+            echo "ERROR: No liblsl*.so found."
             find "$BUILD_DIR" -type f -name "*.so" | head -n 200
             exit 1
           fi
 
           cp "$SO_PATH" "$OUT_SO_DIR/liblsl.so"
-          echo "OK -> ${OUT_SO_DIR}/liblsl.so"
-
-          echo "Final outputs:"
+          echo "OK -> $OUT_SO_DIR/liblsl.so"
           find "${SRC_DIR}/out-android-so" -type f -maxdepth 3 -print
 
       - name: Package artifact (tar.gz)
@@ -175,15 +155,21 @@ jobs:
             VER="sha-${GITHUB_SHA:0:7}"
           fi
 
-          tar -czf "dist/liblsl-android-${VER}.tar.gz" -C "liblsl/out-android-so" .
+          # Package only the ABI folder we built
+          if [[ -d "$GITHUB_WORKSPACE/senda/liblsl/out-android-so" ]]; then
+            PKG_ROOT="$GITHUB_WORKSPACE/senda/liblsl/out-android-so"
+          else
+            PKG_ROOT="$GITHUB_WORKSPACE/liblsl/out-android-so"
+          fi
+
+          tar -czf "dist/liblsl-android-${VER}.tar.gz" -C "$PKG_ROOT" .
           ls -la dist
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: liblsl-android
+          name: liblsl-android-arm64
           path: dist/*.tar.gz
-          if-no-files-found: error
 
   release:
     if: github.ref_type == 'tag'
@@ -192,7 +178,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: liblsl-android
+          name: liblsl-android-arm64
           path: dist
 
       - name: Create GitHub Release (liblsl Android)
