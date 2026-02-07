@@ -30,6 +30,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libncurses5 libtinfo5
 
+      # sdkmanager (modern) requires Java 17+
       - name: Set up JDK 17 (for sdkmanager)
         uses: actions/setup-java@v4
         with:
@@ -107,18 +108,13 @@ jobs:
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
-          # IMPORTANT: CMake 3.6 (rc2) in the Android SDK is unreliable with -S/-B.
-          # Use classic "cd build && cmake <src>" style.
+          # CMake 3.6 in the Android SDK is unreliable with -S/-B. Use classic style.
           pushd "$BUILD_DIR" >/dev/null
           cmake "$SRC_DIR" \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DTHREADS_PTHREAD_ARG=0 \
-            -DCMAKE_THREAD_LIBS_INIT="" \
-            -DCMAKE_HAVE_THREADS_LIBRARY=1 \
-            -DCMAKE_USE_PTHREADS_INIT=1
+            -DCMAKE_BUILD_TYPE=Release
           cmake --build . -- -j"$(nproc)"
           popd >/dev/null
 
