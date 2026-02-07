@@ -13,18 +13,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # AGP 3.0.1 + Gradle 4.1 wants Java 8.
-      - name: Set up JDK 8
+      # 1) JDK 17 ONLY for sdkmanager / cmdline-tools
+      - name: Set up JDK 17 (for sdkmanager)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "8"
-          cache: gradle
+          java-version: "17"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install required SDK packages (SDK 24 + Build Tools 26.0.2 + CMake)
+      - name: Accept licenses + install required SDK packages
         shell: bash
         run: |
           set -euxo pipefail
@@ -36,17 +35,14 @@ jobs:
             "build-tools;26.0.2" \
             "cmake;3.6.4111459" || true
 
-      # Project README says NDK r14b is required (fgetpos/fsetpos issues otherwise)
       - name: Install Android NDK r14b
         shell: bash
         run: |
           set -euxo pipefail
           cd "$ANDROID_SDK_ROOT"
-
           curl -L -o ndk-r14b.zip "https://dl.google.com/android/repository/android-ndk-r14b-linux-x86_64.zip"
           unzip -q ndk-r14b.zip
           rm ndk-r14b.zip
-
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
 
@@ -57,6 +53,14 @@ jobs:
           sdk.dir=$ANDROID_SDK_ROOT
           ndk.dir=$ANDROID_SDK_ROOT/android-ndk-r14b
           EOF
+
+      # 2) Switch to JDK 8 for Gradle/AGP 3.0.1 build
+      - name: Set up JDK 8 (for Gradle build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: gradle
 
       - name: Gradle wrapper executable
         run: chmod +x ./gradlew
