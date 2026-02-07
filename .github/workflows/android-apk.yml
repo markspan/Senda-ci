@@ -26,15 +26,18 @@ jobs:
       - name: Accept licenses + install required SDK packages
         shell: bash
         run: |
-          set -euxo pipefail
-          yes | sdkmanager --licenses
+            set -euxo pipefail
 
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-24" \
-            "build-tools;26.0.2" \
-            "cmake;3.6.4111459" || true
+            set +o pipefail
+            yes | sdkmanager --licenses
+            set -o pipefail
 
+            sdkmanager \
+              "platform-tools" \
+              "platforms;android-24" \
+              "build-tools;26.0.2" \
+              "cmake;3.6.4111459" || true
+              
       - name: Install Android NDK r14b
         shell: bash
         run: |
