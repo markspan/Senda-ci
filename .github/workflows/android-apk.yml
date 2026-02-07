@@ -4,6 +4,7 @@ on:
   push:
     branches: ["master", "main"]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -13,39 +14,53 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1) JDK 17 ONLY for sdkmanager / cmdline-tools
+      # sdkmanager (modern) requires Java 17+
       - name: Set up JDK 17 (for sdkmanager)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept licenses + install required SDK packages
+      # FIX A: Use a fresh Android SDK root + legacy cmdline-tools to avoid
+      # metadata incompatibilities with old AGP (3.0.1).
+      - name: Install Android SDK (legacy cmdline-tools) + packages
         shell: bash
         run: |
-            set -euxo pipefail
+          set -euxo pipefail
 
-            set +o pipefail
-            yes | sdkmanager --licenses
-            set -o pipefail
+          export ANDROID_SDK_ROOT="$HOME/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
 
-            sdkmanager \
-              "platform-tools" \
-              "platforms;android-24" \
-              "build-tools;26.0.2" \
-              "cmake;3.6.4111459"
-              
+          curl -L -o cmdline-tools.zip \
+            "https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip"
+          unzip -q cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          rm cmdline-tools.zip
+
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+          # Accept licenses (avoid pipefail tripping on SIGPIPE from `yes`)
+          yes | sdkmanager --licenses || true
+
+          # Install EXACT packages matching your project
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-24" \
+            "build-tools;26.0.2" \
+            "cmake;3.6.4111459"
+
       - name: Install Android NDK r14b
         shell: bash
         run: |
           set -euxo pipefail
           cd "$ANDROID_SDK_ROOT"
+
           curl -L -o ndk-r14b.zip "https://dl.google.com/android/repository/android-ndk-r14b-linux-x86_64.zip"
           unzip -q ndk-r14b.zip
           rm ndk-r14b.zip
+
           echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
           echo "NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r14b" >> "$GITHUB_ENV"
 
@@ -57,7 +72,7 @@ jobs:
           ndk.dir=$ANDROID_SDK_ROOT/android-ndk-r14b
           EOF
 
-      # 2) Switch to JDK 8 for Gradle/AGP 3.0.1 build
+      # AGP 3.0.1 + Gradle 4.1 wants Java 8 for the build itself.
       - name: Set up JDK 8 (for Gradle build)
         uses: actions/setup-java@v4
         with:
@@ -65,22 +80,23 @@ jobs:
           java-version: "8"
           cache: gradle
 
+      - name: Show tool versions (diagnostics)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "JAVA_HOME=$JAVA_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-}"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          sdkmanager --version || true
+          cmake --version || true
+          ls -la "$ANDROID_SDK_ROOT/cmake" || true
+
       - name: Gradle wrapper executable
         run: chmod +x ./gradlew
 
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
-
-      - name: Upload native build logs (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-build-logs
-          path: |
-            app/.externalNativeBuild/**/cmake_server_log.txt
-            app/.externalNativeBuild/**/CMakeOutput.log
-            app/.externalNativeBuild/**/CMakeError.log
-          if-no-files-found: ignore
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -88,3 +104,17 @@ jobs:
           name: SENDA-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # Always try to upload logs to debug native build failures.
+      - name: Upload build logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            app/.externalNativeBuild/**/*
+            app/.cxx/**/*
+            **/*.log
+            **/*cmake*log*.txt
+            **/*CMake*log*.txt
+          if-no-files-found: ignore
