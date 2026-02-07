@@ -21,8 +21,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # FIX A: Use a fresh Android SDK root + legacy cmdline-tools to avoid
-      # metadata incompatibilities with old AGP (3.0.1).
+      # FIX A: Fresh Android SDK root + legacy cmdline-tools
       - name: Install Android SDK (legacy cmdline-tools) + packages
         shell: bash
         run: |
@@ -80,7 +79,7 @@ jobs:
           java-version: "8"
           cache: gradle
 
-      - name: Show tool versions (diagnostics)
+      - name: Diagnostics (SDK/CMake/NDK)
         shell: bash
         run: |
           set -euxo pipefail
@@ -89,14 +88,23 @@ jobs:
           echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-}"
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
           sdkmanager --version || true
-          cmake --version || true
+
+          echo "SDK cmake dir:"
           ls -la "$ANDROID_SDK_ROOT/cmake" || true
+          find "$ANDROID_SDK_ROOT/cmake" -maxdepth 4 -type f -name cmake -print || true
+
+          echo "System cmake:"
+          which cmake || true
+          cmake --version || true
 
       - name: Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+      - name: Build Debug APK (log to file)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./gradlew :app:assembleDebug --stacktrace --info --no-daemon 2>&1 | tee gradle-build.log
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -105,16 +113,15 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      # Always try to upload logs to debug native build failures.
       - name: Upload build logs (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
+            gradle-build.log
+            /home/runner/.gradle/daemon/**/*
+            /home/runner/.gradle/caches/**/native/**
             app/.externalNativeBuild/**/*
             app/.cxx/**/*
-            **/*.log
-            **/*cmake*log*.txt
-            **/*CMake*log*.txt
           if-no-files-found: ignore
