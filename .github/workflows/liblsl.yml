@@ -114,7 +114,11 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
             -DANDROID_ABI="$ABI" \
             -DANDROID_PLATFORM="android-${ANDROID_API}" \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTHREADS_PTHREAD_ARG=0 \
+            -DCMAKE_THREAD_LIBS_INIT="" \
+            -DCMAKE_HAVE_THREADS_LIBRARY=1 \
+            -DCMAKE_USE_PTHREADS_INIT=1
           cmake --build . -- -j"$(nproc)"
           popd >/dev/null
 
