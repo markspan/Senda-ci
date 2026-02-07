@@ -107,8 +107,7 @@ jobs:
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
-          # IMPORTANT: CMake 3.6 (rc2) in the Android SDK is unreliable with -S/-B.
-          # Use classic "cd build && cmake <src>" style.
+          # Configure (classic style for this old SDK CMake)
           pushd "$BUILD_DIR" >/dev/null
           cmake "$SRC_DIR" \
             -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
@@ -117,17 +116,30 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release
           popd >/dev/null
 
-          # ---- diagnostics: show who injects -lpthread ----
+          # Pre-build diagnostics: where pthread will come from in generated build files
+          echo "---- grep pthread in build tree (pre-build) ----"
+          grep -R --line-number -E '(^| )-lpthread( |$)|(^| )pthread( |$)|Threads::Threads' "$BUILD_DIR" | head -n 200 || true
+
+          # Build, but do NOT abort immediately on failure; we want post-fail diagnostics
+          set +e
+          pushd "$BUILD_DIR" >/dev/null
+          cmake --build . -- -j"$(nproc)"
+          rc=$?
+          popd >/dev/null
+          set -e
+
+          # Post-build diagnostics (will run even if link fails)
           echo "---- link.txt (lsl target) ----"
           sed -n '1,200p' "$BUILD_DIR/CMakeFiles/lsl.dir/link.txt" || true
 
-          echo "---- grep pthread in build tree ----"
+          echo "---- grep pthread in build tree (post-build) ----"
           grep -R --line-number -E '(^| )-lpthread( |$)|(^| )pthread( |$)|Threads::Threads' "$BUILD_DIR" | head -n 200 || true
 
-          # Build (CMake 3.6 doesn't support "-j" directly; pass it to the native tool)
-          pushd "$BUILD_DIR" >/dev/null
-          cmake --build . -- -j"$(nproc)"
-          popd >/dev/null
+          # If build failed, fail the step now (after diagnostics)
+          if [[ $rc -ne 0 ]]; then
+            echo "Build failed with exit code $rc"
+            exit $rc
+          fi
 
           OUT_SO_DIR="${SRC_DIR}/out-android-so/${ABI}"
           rm -rf "${SRC_DIR}/out-android-so"
