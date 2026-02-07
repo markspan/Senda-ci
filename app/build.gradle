@@ -16,6 +16,12 @@ android {
                 cppFlags "-std=c++11 -frtti -fexceptions"
             }
         }
+		ndk {
+			// IMPORTANT: do NOT build "armeabi"
+            abiFilters "armeabi-v7a"
+            // optionally add: "arm64-v8a"
+            // optionally add: "x86", "x86_64" for emulator
+        }
     }
 
     buildTypes {
