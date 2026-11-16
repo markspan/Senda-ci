@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Sensorium" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/rug_red_light</item>
+        <item name="colorOnPrimary">@color/rug_red_on_light</item>
+        <item name="colorPrimaryContainer">@color/rug_red_container_dark</item>
+        <item name="colorOnPrimaryContainer">@color/rug_red_container</item>
+        <item name="colorTertiary">@color/acc_blue</item>
+        <item name="colorSecondary">@color/acc_green</item>
+    </style>
+</resources>

@@ -1,7 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#3F51B5</color>
-    <color name="colorPrimaryDark">#303F9F</color>
-    <color name="colorAccent">#FF4081</color>
-    <color name="black">#474747</color>
+    <!-- RUG red, as in PolarMobile. -->
+    <color name="rug_red">#D0182F</color>
+    <color name="rug_red_dark">#410008</color>
+    <color name="rug_red_container">#FFDAD9</color>
+    <!-- Dark theme variants of RUG red. -->
+    <color name="rug_red_light">#FFB3B1</color>
+    <color name="rug_red_on_light">#680012</color>
+    <color name="rug_red_container_dark">#92001E</color>
+    <color name="polar_red">#D0182F</color>
+    <color name="acc_blue">#1E6FD9</color>
+    <color name="acc_green">#2E8B57</color>
+    <color name="ic_launcher_background">#D0182F</color>
 </resources>

@@ -1,79 +1,64 @@
 <resources>
-    <string name="app_name">SENDA</string>
-    <string name="action_settings">Settings</string>
-    <string name="senda_sensor_data_streamer">SENDA (Sensor Data Streamer)</string>
-    <string name="dont_show_again">Do not show again</string>
-    <string name="title_activity_settings">Settings</string>
+    <string name="app_name">Sensorium</string>
+    <string name="subtitle">Phone sensors &amp; Polar H10 → Lab Streaming Layer</string>
 
-    <!-- Strings related to Settings -->
+    <!-- Phone sensors -->
+    <string name="phone_sensors">Phone sensors</string>
+    <string name="select_all">All</string>
+    <string name="select_none">None</string>
+    <string name="sensor_rate">Sensor rate (Hz)</string>
+    <string name="sensor_rate_max">Max</string>
+    <string name="no_sensors">This phone reports no streamable sensors.</string>
+    <string name="sensor_rate_hint">Applies to continuous sensors; on-change sensors (light, proximity, steps…) stream at an irregular rate.</string>
 
-    <!-- Example General settings -->
-    <string name="pref_header_general">General</string>
+    <!-- Audio -->
+    <string name="microphone">Microphone</string>
+    <string name="stream_audio">Audio · mono · float32</string>
+    <string name="audio_rate">Sample rate (Hz)</string>
+    <string name="audio_permission_needed">Microphone permission is required for the audio stream.</string>
 
-    <string name="pref_title_social_recommendations">Enable social recommendations</string>
-    <string name="pref_description_social_recommendations">Recommendations for people to contact
-        based on your message history
-    </string>
+    <!-- Polar -->
+    <string name="polar_h10">Polar H10</string>
+    <string name="stream_polar">Stream a Polar H10</string>
+    <string name="scan">Scan</string>
+    <string name="stop_scan">Stop</string>
+    <string name="no_devices">Tap Scan and wear the H10 (wet the electrodes) so it starts advertising.</string>
+    <string name="stream_ecg">ECG · 130 Hz · µV</string>
+    <string name="stream_acc">Accelerometer · 3 axes · mG</string>
+    <string name="stream_hr">Heart rate &amp; RR intervals</string>
+    <string name="acc_rate">ACC rate (Hz)</string>
+    <string name="acc_range">ACC range (g)</string>
+    <string name="select_device">Select a Polar device first, or switch the Polar H10 off</string>
+    <string name="permissions_needed">Bluetooth permissions are required to find and connect to the H10.</string>
+    <string name="bluetooth_off">Bluetooth is turned off</string>
+    <string name="enable_bluetooth">Turn on</string>
 
-    <string name="pref_title_display_name">Display name</string>
-    <string name="pref_default_display_name">John Smith</string>
+    <!-- Streaming -->
+    <string name="start_streaming">Start streaming</string>
+    <string name="stop_streaming">Stop streaming</string>
+    <string name="nothing_selected">Select at least one sensor, the microphone or a Polar H10</string>
+    <string name="status">Status</string>
+    <string name="preview">Signal</string>
+    <string name="stop">Stop</string>
+    <string name="notification_channel">Streaming</string>
+    <string name="notification_title">Sensorium is streaming to LSL</string>
+    <string name="no_network">No Wi-Fi / network: LSL consumers on other machines cannot see the streams.</string>
 
-    <string name="pref_title_add_friends_to_messages">Add friends to messages</string>
-    <string-array name="pref_example_list_titles">
-        <item>Always</item>
-        <item>When possible</item>
-        <item>Never</item>
-    </string-array>
-    <string-array name="pref_example_list_values">
-        <item>1</item>
-        <item>0</item>
-        <item>-1</item>
-    </string-array>
+    <!-- Phone IP address card -->
+    <string name="address_title">Phone IP address</string>
+    <string name="address_hint">If the recording PC does not see the streams, add this line to the [lab] section of /etc/lsl_api/lsl_api.cfg (Linux/macOS) or lsl_api.cfg next to LabRecorder (Windows), then restart LabRecorder:</string>
+    <string name="copy">Copy</string>
+    <string name="copied">KnownPeers line copied</string>
+    <string name="no_address">No network</string>
 
-    <!-- Example settings for Data & Sync -->
-    <string name="pref_header_data_sync">Data &amp; sync</string>
-
-    <string name="pref_title_sync_frequency">Sync frequency</string>
-    <string-array name="pref_sync_frequency_titles">
-        <item>15 minutes</item>
-        <item>30 minutes</item>
-        <item>1 hour</item>
-        <item>3 hours</item>
-        <item>6 hours</item>
-        <item>Never</item>
-    </string-array>
-    <string-array name="pref_sync_frequency_values">
-        <item>15</item>
-        <item>30</item>
-        <item>60</item>
-        <item>180</item>
-        <item>360</item>
-        <item>-1</item>
-    </string-array>
-
-    <string-array name="list_preference_entries">
-        <item>Entry 1</item>
-        <item>Entry 2</item>
-        <item>Entry 3</item>
-    </string-array>
-
-    <string-array name="list_preference_entry_values">
-        <item>1</item>
-        <item>2</item>
-        <item>3</item>
-    </string-array>
-
-    <string-array name="multi_select_list_preference_default_value" />
-
-    <string name="pref_title_system_sync_settings">System sync settings</string>
-
-    <!-- Example settings for Notifications -->
-    <string name="pref_header_notifications">Notifications</string>
-
-    <string name="pref_title_new_message_notifications">New message notifications</string>
-
-    <string name="pref_title_ringtone">Ringtone</string>
-    <string name="pref_ringtone_silent">Silent</string>
-
-    <string name="pref_title_vibrate">Vibrate</string>
+    <!-- About -->
+    <string name="about">About</string>
+    <string name="about_description">Streams the sensors of this phone, its microphone and a Polar H10 chest strap (ECG, accelerometer, heart rate, RR intervals) to Lab Streaming Layer.</string>
+    <string name="about_history">Sensorium grew out of SENDA by Ali Ayub Khan (NeuropsyOL, University of Oldenburg), rewritten with the Polar H10 support of PolarMobile.</string>
+    <string name="about_author_name">Mark M. Span</string>
+    <string name="about_author_roles">Scientific Advisor, Research Support, Faculty of Behavioural and Social Sciences\nLecturer, Experimental Psychology\nUniversity of Groningen, the Netherlands</string>
+    <string name="about_links">Project: https://github.com/markspan/Senda-ci\nGitHub: https://github.com/markspan\nStaff page: https://www.rug.nl/staff/m.m.span/</string>
+    <string name="about_open_github">GitHub page</string>
+    <string name="about_close">Close</string>
+    <string name="project_url" translatable="false">https://github.com/markspan/Senda-ci</string>
 </resources>
