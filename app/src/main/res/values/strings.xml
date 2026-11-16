@@ -19,6 +19,10 @@
 
     <!-- Polar -->
     <string name="polar_h10">Polar H10</string>
+    <string name="timestamps">Time stamps</string>
+    <string name="arrival_stamps">Stamp on arrival (as SENDA)</string>
+    <string name="timestamps_measured_hint">Phone sensors and audio are stamped with the moment they were measured. Recommended.</string>
+    <string name="timestamps_arrival_hint">Phone sensors and audio are stamped when they reach the app, as SENDA does. Delivery delays of a few to tens of ms end up in the time stamps.</string>
     <string name="stream_polar">Stream a Polar H10</string>
     <string name="scan">Scan</string>
     <string name="stop_scan">Stop</string>

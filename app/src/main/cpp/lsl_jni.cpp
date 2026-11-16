@@ -54,10 +54,11 @@ JNIEXPORT jdouble JNICALL JNI_FN(localClock)(JNIEnv *, jobject) {
 JNIEXPORT jlong JNICALL JNI_FN(createOutlet)(JNIEnv *env, jobject, jstring name, jstring type,
 	jint channelCount, jdouble srate, jstring sourceId, jobjectArray channelLabels,
 	jobjectArray channelUnits, jstring channelType, jstring manufacturer, jstring model,
-	jint chunkSize, jint maxBuffered) {
+	jint chunkSize, jint maxBuffered, jstring timestamps) {
 	const std::string sName = toString(env, name), sType = toString(env, type),
 					  sSource = toString(env, sourceId), sChType = toString(env, channelType),
-					  sManuf = toString(env, manufacturer), sModel = toString(env, model);
+					  sManuf = toString(env, manufacturer), sModel = toString(env, model),
+					  sStamps = toString(env, timestamps);
 
 	lsl_streaminfo info = lsl_create_streaminfo(
 		sName.c_str(), sType.c_str(), channelCount, srate, cft_float32, sSource.c_str());
@@ -83,6 +84,8 @@ JNIEXPORT jlong JNICALL JNI_FN(createOutlet)(JNIEnv *env, jobject, jstring name,
 	}
 	lsl_xml_ptr acq = lsl_append_child(desc, "acquisition");
 	lsl_append_child_value(acq, "software", "Sensorium (Android)");
+	// How the samples are time stamped, so an analysis can tell the two modes apart.
+	if (!sStamps.empty()) lsl_append_child_value(acq, "timestamps", sStamps.c_str());
 
 	lsl_outlet outlet = lsl_create_outlet(info, chunkSize, maxBuffered);
 	lsl_destroy_streaminfo(info); // the outlet keeps its own copy

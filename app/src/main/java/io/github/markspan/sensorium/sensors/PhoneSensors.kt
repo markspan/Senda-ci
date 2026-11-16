@@ -11,6 +11,8 @@ import android.os.SystemClock
 import io.github.markspan.sensorium.lsl.IRREGULAR_RATE
 import io.github.markspan.sensorium.lsl.LslNative
 import io.github.markspan.sensorium.lsl.LslOutlet
+import io.github.markspan.sensorium.lsl.TIMESTAMPS_ARRIVAL
+import io.github.markspan.sensorium.lsl.TIMESTAMPS_SENSOR
 import io.github.markspan.sensorium.stream.OutletInfo
 import io.github.markspan.sensorium.stream.StreamState
 import java.util.concurrent.ConcurrentHashMap
@@ -95,6 +97,8 @@ object PhoneSensors {
  * thread and stamped with the sensor's own hardware time stamp, converted to the LSL clock.
  *
  * @param rateHz requested rate for continuous sensors; 0 = as fast as possible.
+ * @param arrivalStamps stamp each event with lsl_local_clock() when it reaches the app, as SENDA
+ *   does, instead of with the sensor's hardware time stamp.
  */
 class PhoneSensorStreamer(
     context: Context,
@@ -102,6 +106,7 @@ class PhoneSensorStreamer(
     private val rateHz: Int,
     private val deviceName: String,
     private val sourcePrefix: String,
+    private val arrivalStamps: Boolean = false,
 ) : SensorEventListener {
 
     private val sm = context.getSystemService(SensorManager::class.java)
@@ -167,6 +172,7 @@ class PhoneSensorStreamer(
             channelType = spec.lslType,
             manufacturer = sensor.vendor,
             model = sensor.name,
+            timestamps = if (arrivalStamps) TIMESTAMPS_ARRIVAL else TIMESTAMPS_SENSOR,
         ).also { outlets[sensor] = it }
     } catch (e: Throwable) {
         failed += sensor
@@ -185,7 +191,7 @@ class PhoneSensorStreamer(
         val sample = if (event.values.size == n) event.values.copyOf()
         else FloatArray(n) { i -> event.values.getOrElse(i) { 0f } }
 
-        outlet.push(sample, toLslTime(event.timestamp))
+        if (arrivalStamps) outlet.push(sample) else outlet.push(sample, toLslTime(event.timestamp))
 
         if (sensor.type == Sensor.TYPE_ACCELEROMETER) StreamState.phoneAccPreview.add(sample)
         StreamState.phoneSamples.incrementAndGet()

@@ -90,6 +90,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var accRate: AutoCompleteTextView
     private lateinit var accRange: AutoCompleteTextView
 
+    private lateinit var arrivalSwitch: MaterialSwitch
+
     private lateinit var streamButton: MaterialButton
     private var wasRunning = false
 
@@ -125,6 +127,7 @@ class MainActivity : AppCompatActivity() {
         hrSwitch = findViewById(R.id.hrSwitch)
         accRate = findViewById(R.id.accRate)
         accRange = findViewById(R.id.accRange)
+        arrivalSwitch = findViewById(R.id.arrivalSwitch)
         streamButton = findViewById(R.id.streamButton)
 
         deviceAdapter = DeviceAdapter()
@@ -142,7 +145,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.selectNone).setOnClickListener { setAllSensors(false) }
         scanButton.setOnClickListener { if (scanning) stopScan() else ensureReadyAndScan() }
         streamButton.setOnClickListener { toggleStreaming() }
-        listOf(audioSwitch, accSwitch, polarSwitch).forEach {
+        listOf(audioSwitch, accSwitch, polarSwitch, arrivalSwitch).forEach {
             it.setOnCheckedChangeListener { _, _ -> updateControls(StreamState.state.value) }
         }
 
@@ -225,6 +228,7 @@ class MainActivity : AppCompatActivity() {
         setupDropdown(audioRate, AudioStreamer.RATES, prefs.getInt("audioRate", AudioStreamer.DEFAULT_RATE))
 
         polarSwitch.isChecked = prefs.getBoolean("polar", false)
+        arrivalSwitch.isChecked = prefs.getBoolean("arrivalStamps", false)
         ecgSwitch.isChecked = prefs.getBoolean("ecg", true)
         accSwitch.isChecked = prefs.getBoolean("acc", true)
         hrSwitch.isChecked = prefs.getBoolean("hr", false)
@@ -244,6 +248,7 @@ class MainActivity : AppCompatActivity() {
         putBoolean("audio", audioSwitch.isChecked)
         putInt("audioRate", dropdownValue(audioRate, AudioStreamer.DEFAULT_RATE))
         putBoolean("polar", polarSwitch.isChecked)
+        putBoolean("arrivalStamps", arrivalSwitch.isChecked)
         putBoolean("ecg", ecgSwitch.isChecked)
         putBoolean("acc", accSwitch.isChecked)
         putBoolean("hr", hrSwitch.isChecked)
@@ -456,6 +461,7 @@ class MainActivity : AppCompatActivity() {
             .putExtra(StreamService.EXTRA_SENSORS, sensorKeys.toTypedArray())
             .putExtra(StreamService.EXTRA_SENSOR_RATE, dropdownValue(sensorRate, SensorCatalog.DEFAULT_RATE))
             .putExtra(StreamService.EXTRA_AUDIO_RATE, if (audio) dropdownValue(audioRate, AudioStreamer.DEFAULT_RATE) else 0)
+            .putExtra(StreamService.EXTRA_ARRIVAL_STAMPS, arrivalSwitch.isChecked)
         if (device != null) {
             prefs.edit {
                 putString("lastAddress", device.address)
@@ -531,6 +537,10 @@ class MainActivity : AppCompatActivity() {
         accRate.isEnabled = idle && accSwitch.isChecked
         accRange.isEnabled = idle && accSwitch.isChecked
         scanButton.isEnabled = idle
+        arrivalSwitch.isEnabled = idle
+        findViewById<TextView>(R.id.arrivalHint).setText(
+            if (arrivalSwitch.isChecked) R.string.timestamps_arrival_hint else R.string.timestamps_measured_hint
+        )
         deviceAdapter.enabled = idle
         updateScanUi()
 

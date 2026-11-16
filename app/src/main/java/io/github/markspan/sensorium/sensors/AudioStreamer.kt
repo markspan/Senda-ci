@@ -8,6 +8,8 @@ import android.media.MediaRecorder
 import android.os.Process
 import io.github.markspan.sensorium.lsl.LslNative
 import io.github.markspan.sensorium.lsl.LslOutlet
+import io.github.markspan.sensorium.lsl.TIMESTAMPS_ARRIVAL
+import io.github.markspan.sensorium.lsl.TIMESTAMPS_CAPTURE
 import io.github.markspan.sensorium.stream.OutletInfo
 import io.github.markspan.sensorium.stream.StreamState
 
@@ -17,11 +19,15 @@ import io.github.markspan.sensorium.stream.StreamState
  * [AudioRecord.getTimestamp], converted to the LSL clock, so the delay of the phone's audio input
  * path is not in the time stamps; liblsl spaces the earlier samples back by the nominal rate.
  * When the phone gives no capture time, the block is stamped at push time instead.
+ *
+ * @param arrivalStamps stamp each block at push time, as SENDA does, instead of with its capture
+ *   time.
  */
 class AudioStreamer(
     private val sampleRate: Int,
     private val deviceName: String,
     private val sourcePrefix: String,
+    private val arrivalStamps: Boolean = false,
 ) {
     private var outlet: LslOutlet? = null
     private var record: AudioRecord? = null
@@ -52,6 +58,7 @@ class AudioStreamer(
             channelType = "Audio",
             manufacturer = android.os.Build.MANUFACTURER,
             model = android.os.Build.MODEL,
+            timestamps = if (arrivalStamps) TIMESTAMPS_ARRIVAL else TIMESTAMPS_CAPTURE,
         )
         record = rec
         running = true
@@ -68,7 +75,7 @@ class AudioStreamer(
                 if (n <= 0) continue
                 framesRead += n
                 val samples = FloatArray(n) { pcm[it] / 32768f }
-                outlet?.pushChunk(samples, clock.lslTimeOf(framesRead - 1))
+                outlet?.pushChunk(samples, if (arrivalStamps) 0.0 else clock.lslTimeOf(framesRead - 1))
                 StreamState.audioSamples.addAndGet(n.toLong())
                 // Decimated copy for the on-screen preview.
                 var i = phase

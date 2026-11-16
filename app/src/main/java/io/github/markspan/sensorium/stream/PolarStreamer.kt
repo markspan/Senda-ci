@@ -11,6 +11,8 @@ import io.github.markspan.sensorium.ble.PmdFrame
 import io.github.markspan.sensorium.ble.PolarH10Client
 import io.github.markspan.sensorium.lsl.IRREGULAR_RATE
 import io.github.markspan.sensorium.lsl.LslOutlet
+import io.github.markspan.sensorium.lsl.TIMESTAMPS_ARRIVAL
+import io.github.markspan.sensorium.lsl.TIMESTAMPS_BLE_ARRIVAL
 
 /**
  * Relays one Polar H10 to LSL, with the same stream names and source ids as the PolarBLE desktop
@@ -46,18 +48,18 @@ class PolarStreamer(
         val n = deviceName
         if (config.ecg) ecgOutlet = LslOutlet(
             "${n}_ecg", "ECG", 1, PmdCommand.ECG_SAMPLE_RATE.toDouble(), "${n}_ecg",
-            listOf("ECG"), listOf("microvolts"), "ECG", "Polar", "H10",
+            listOf("ECG"), listOf("microvolts"), "ECG", "Polar", "H10", timestamps = TIMESTAMPS_BLE_ARRIVAL,
         )
         if (config.acc) accOutlet = LslOutlet(
             "${n}_acc", "Accelerometer", 3, config.accRate.toDouble(), "${n}_acc",
-            listOf("X", "Y", "Z"), listOf("mG"), "ACC", "Polar", "H10",
+            listOf("X", "Y", "Z"), listOf("mG"), "ACC", "Polar", "H10", timestamps = TIMESTAMPS_BLE_ARRIVAL,
         )
         if (config.heartRate) {
             hrOutlet = LslOutlet(
-                "${n}_hr", "HeartRate", 1, IRREGULAR_RATE, "${n}_hr", listOf("HR"), listOf("bpm"), "HR", "Polar", "H10",
+                "${n}_hr", "HeartRate", 1, IRREGULAR_RATE, "${n}_hr", listOf("HR"), listOf("bpm"), "HR", "Polar", "H10", timestamps = TIMESTAMPS_ARRIVAL,
             )
             rrOutlet = LslOutlet(
-                "${n}_rr", "RR", 1, IRREGULAR_RATE, "${n}_rr", listOf("RR"), listOf("ms"), "RR", "Polar", "H10",
+                "${n}_rr", "RR", 1, IRREGULAR_RATE, "${n}_rr", listOf("RR"), listOf("ms"), "RR", "Polar", "H10", timestamps = TIMESTAMPS_ARRIVAL,
             )
         }
     }

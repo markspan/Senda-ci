@@ -85,6 +85,43 @@ fits a straight line through the time stamps of each regular stream. The average
 stays in the data; for analyses that need the H10 aligned to the millisecond, record a shared sync
 event (for example a tap on the strap that also shows in the phone accelerometer).
 
+### Stamp on arrival (as SENDA)
+
+<img src="docs/screenshots/timestamps.png" width="320" align="right" alt="Time stamps card with the Stamp on arrival switch">
+
+The **Time stamps** card has a switch **Stamp on arrival (as SENDA)**. Off (the default) gives
+the time stamps described above. On, phone sensors and the microphone are stamped the way
+[SENDA](https://github.com/NeuropsyOL/SENDA) stamps them: with `lsl_local_clock()` at the moment
+the data reaches the app. Use it to compare with, or continue, recordings made with SENDA;
+otherwise leave it off. The Polar H10 is stamped on arrival in both settings.
+
+<br clear="right">
+
+What changes with the switch on:
+
+| Stream | Time stamp | Effect on timing |
+|---|---|---|
+| Phone sensors | Moment Android delivers the event to the app | Every sample is late by the delivery delay: the sensor hub, Android's sensor service and thread scheduling. Usually a few ms, but it varies from event to event and can reach tens of ms when the phone is busy or events arrive in bursts; samples of one burst then get almost the same time stamp |
+| Microphone | Moment each ~20 ms block is read, for its last sample; earlier samples spaced by the sample rate | Every block is late by the phone's audio input delay plus the read delay: on the emulator a median of 5 ms and up to about 110 ms, on phones often more |
+| Polar H10 | Unchanged | Unchanged |
+
+What that means for analysis:
+
+- **Regular streams** (continuous sensors, microphone): dejittering when loading the XDF (the pyxdf
+  default) removes the variation, but not the average delay. Everything from the phone then sits
+  that average delay later than it happened, compared with streams from other devices such as EEG
+  or markers. That delay differs per phone and per sensor and is not recorded anywhere.
+- **Irregular streams** (light, proximity, steps and other on-change sensors) cannot be
+  dejittered: each event keeps its own delivery delay.
+- **Sample spacing**: without dejittering, the intervals between samples reflect delivery, not
+  measurement, which distorts anything computed from them (velocities, derivatives, event timing
+  within a stream).
+
+Which setting a recording used is in each stream's meta-data, under
+`<desc><acquisition><timestamps>`: `sensor hardware time stamp, converted to lsl_local_clock`,
+`audio capture time (AudioRecord.getTimestamp), converted to lsl_local_clock`, or
+`lsl_local_clock on arrival in the app`.
+
 ## Install
 
 Download `Sensorium-<version>-release.apk` from the
@@ -93,7 +130,7 @@ Download `Sensorium-<version>-release.apk` from the
 Copy it to the phone and open it (allow "install unknown apps"), or:
 
 ```bash
-adb install -r Sensorium-1.0.1-release.apk
+adb install -r Sensorium-1.1.0-release.apk
 ```
 
 Requires Android 8.0 (API 26) or newer. Bluetooth LE is only needed for the Polar H10.

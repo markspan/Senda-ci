@@ -25,6 +25,7 @@ object LslNative {
         model: String,
         chunkSize: Int,
         maxBuffered: Int,
+        timestamps: String,
     ): Long
 
     external fun pushChunk(handle: Long, data: FloatArray, timestamp: Double): Int
@@ -42,6 +43,12 @@ object LslNative {
 /** Use for streams without a fixed sampling rate (heart rate, RR intervals, on-change sensors). */
 const val IRREGULAR_RATE = 0.0
 
+// Values of <acquisition><timestamps> in the stream meta-data.
+const val TIMESTAMPS_SENSOR = "sensor hardware time stamp, converted to lsl_local_clock"
+const val TIMESTAMPS_CAPTURE = "audio capture time (AudioRecord.getTimestamp), converted to lsl_local_clock"
+const val TIMESTAMPS_ARRIVAL = "lsl_local_clock on arrival in the app"
+const val TIMESTAMPS_BLE_ARRIVAL = "lsl_local_clock on arrival of each Bluetooth packet (last sample), earlier samples at the nominal rate"
+
 /** A float32 LSL stream outlet. */
 class LslOutlet(
     val name: String,
@@ -55,12 +62,14 @@ class LslOutlet(
     manufacturer: String,
     model: String = "",
     maxBufferedSeconds: Int = 360,
+    /** How samples are time stamped; written to `<acquisition><timestamps>` in the meta-data. */
+    timestamps: String = "",
 ) : Closeable {
 
     @Volatile
     private var handle: Long = LslNative.createOutlet(
         name, type, channelCount, nominalRate, sourceId, channelLabels.toTypedArray(),
-        channelUnits.toTypedArray(), channelType, manufacturer, model, 0, maxBufferedSeconds,
+        channelUnits.toTypedArray(), channelType, manufacturer, model, 0, maxBufferedSeconds, timestamps,
     )
 
     init {

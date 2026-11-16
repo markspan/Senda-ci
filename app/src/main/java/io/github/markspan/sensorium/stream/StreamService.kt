@@ -54,6 +54,7 @@ class StreamService : Service() {
         val sensorKeys = intent.getStringArrayExtra(EXTRA_SENSORS)?.toSet().orEmpty()
         val audioRate = intent.getIntExtra(EXTRA_AUDIO_RATE, 0)
         val polarAddress = intent.getStringExtra(EXTRA_POLAR_ADDRESS)
+        val arrivalStamps = intent.getBooleanExtra(EXTRA_ARRIVAL_STAMPS, false)
 
         running = true
         goForeground(withMicrophone = audioRate > 0)
@@ -67,13 +68,14 @@ class StreamService : Service() {
             if (sensorKeys.isNotEmpty()) {
                 sensors = PhoneSensorStreamer(
                     this, sensorKeys, intent.getIntExtra(EXTRA_SENSOR_RATE, 50), deviceName, sourcePrefix,
+                    arrivalStamps,
                 ).also { it.start() }
             }
         } catch (e: Throwable) {
             StreamState.message("Phone sensors: ${e.message}")
         }
         if (audioRate > 0) try {
-            audio = AudioStreamer(audioRate, deviceName, sourcePrefix).also { it.start() }
+            audio = AudioStreamer(audioRate, deviceName, sourcePrefix, arrivalStamps).also { it.start() }
         } catch (e: Throwable) {
             audio?.stop()
             audio = null
@@ -242,6 +244,8 @@ class StreamService : Service() {
         const val EXTRA_ACC_RATE = "accRate"
         const val EXTRA_ACC_RANGE = "accRange"
         const val EXTRA_HR = "hr"
+        /** Stamp phone sensors and audio on arrival in the app, as SENDA does. */
+        const val EXTRA_ARRIVAL_STAMPS = "arrivalStamps"
 
         private const val CHANNEL_ID = "streaming"
         private const val NOTIFICATION_ID = 1
