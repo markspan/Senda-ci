@@ -3,15 +3,20 @@ package io.github.markspan.sensorium.sensors
 import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioTimestamp
 import android.media.MediaRecorder
 import android.os.Process
+import io.github.markspan.sensorium.lsl.LslNative
 import io.github.markspan.sensorium.lsl.LslOutlet
 import io.github.markspan.sensorium.stream.OutletInfo
 import io.github.markspan.sensorium.stream.StreamState
 
 /**
  * Streams the microphone as a mono float32 LSL stream (full scale = ±1). Audio is read in blocks
- * of ~20 ms; liblsl stamps each block at push time and spaces the samples by the nominal rate.
+ * of ~20 ms. The last sample of each block is stamped with its capture time as reported by
+ * [AudioRecord.getTimestamp], converted to the LSL clock, so the delay of the phone's audio input
+ * path is not in the time stamps; liblsl spaces the earlier samples back by the nominal rate.
+ * When the phone gives no capture time, the block is stamped at push time instead.
  */
 class AudioStreamer(
     private val sampleRate: Int,
@@ -55,12 +60,15 @@ class AudioStreamer(
         thread = Thread({
             Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
             val pcm = ShortArray(block)
+            val clock = CaptureClock(rec, sampleRate)
+            var framesRead = 0L
             var phase = 0
             while (running) {
                 val n = rec.read(pcm, 0, pcm.size)
                 if (n <= 0) continue
+                framesRead += n
                 val samples = FloatArray(n) { pcm[it] / 32768f }
-                outlet?.push(samples)
+                outlet?.pushChunk(samples, clock.lslTimeOf(framesRead - 1))
                 StreamState.audioSamples.addAndGet(n.toLong())
                 // Decimated copy for the on-screen preview.
                 var i = phase
@@ -86,7 +94,49 @@ class AudioStreamer(
     fun outletInfos(): List<OutletInfo> =
         listOfNotNull(outlet?.let { OutletInfo(it.name, it.type, it.hasConsumers) })
 
+    /**
+     * Capture time of a recorded frame on the LSL clock. [AudioRecord.getTimestamp] gives the
+     * capture time of one frame on the monotonic clock (System.nanoTime); other frames follow at the
+     * sample rate. The offset between the monotonic clock and lsl_local_clock() is measured
+     * directly (on Android both are normally CLOCK_MONOTONIC, so it is close to 0).
+     */
+    private class CaptureClock(private val rec: AudioRecord, private val sampleRate: Int) {
+        private val ts = AudioTimestamp()
+        private var offset = 0.0
+        private var lastOffsetUpdate = 0L
+
+        init {
+            updateOffset()
+        }
+
+        /** LSL time of frame [frame] (0 = first frame recorded), or 0.0 = "stamp at push time". */
+        fun lslTimeOf(frame: Long): Double {
+            if (rec.getTimestamp(ts, AudioTimestamp.TIMEBASE_MONOTONIC) != AudioRecord.SUCCESS) return 0.0
+            val nowNanos = System.nanoTime()
+            if (nowNanos - lastOffsetUpdate > 5_000_000_000L) updateOffset()
+            val t = frameTime(frame, ts.framePosition, ts.nanoTime, sampleRate) + offset
+            val now = nowNanos / 1e9 + offset
+            // A capture time in the future, or older than the audio buffer can be, is not plausible.
+            return if (t <= now + 0.005 && now - t < 1.0) t else 0.0
+        }
+
+        private fun updateOffset() {
+            val before = System.nanoTime()
+            val lsl = LslNative.localClock()
+            val after = System.nanoTime()
+            offset = lsl - (before + after) / 2 / 1e9
+            lastOffsetUpdate = after
+        }
+    }
+
     companion object {
+        /**
+         * Capture time in seconds (monotonic clock) of frame [frame], given that frame
+         * [refFrame] was captured at [refNanos].
+         */
+        fun frameTime(frame: Long, refFrame: Long, refNanos: Long, sampleRate: Int): Double =
+            refNanos / 1e9 + (frame - refFrame).toDouble() / sampleRate
+
         val RATES = listOf(8000, 16000, 22050, 44100, 48000)
         const val DEFAULT_RATE = 16000
     }

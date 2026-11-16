@@ -91,17 +91,19 @@ JNIEXPORT jlong JNICALL JNI_FN(createOutlet)(JNIEnv *env, jobject, jstring name,
 }
 
 /**
- * Pushes a chunk of multiplexed samples and leaves time stamping to liblsl: the last sample gets
- * lsl_local_clock() at push time, earlier ones are spaced back by the nominal rate.
+ * Pushes a chunk of multiplexed samples. The most recent (last) sample is stamped with timestamp
+ * (lsl_local_clock() domain), or with lsl_local_clock() at push time when timestamp is 0; liblsl
+ * spaces the earlier samples back by the nominal rate.
  */
-JNIEXPORT jint JNICALL JNI_FN(pushChunk)(JNIEnv *env, jobject, jlong handle, jfloatArray data) {
+JNIEXPORT jint JNICALL JNI_FN(pushChunk)(
+	JNIEnv *env, jobject, jlong handle, jfloatArray data, jdouble timestamp) {
 	auto outlet = reinterpret_cast<lsl_outlet>(handle);
 	const jsize nData = env->GetArrayLength(data);
 	if (!outlet || nData == 0) return 0;
 
 	std::vector<float> buf(static_cast<size_t>(nData));
 	env->GetFloatArrayRegion(data, 0, nData, buf.data());
-	return lsl_push_chunk_ftp(outlet, buf.data(), static_cast<unsigned long>(nData), 0.0, 1);
+	return lsl_push_chunk_ftp(outlet, buf.data(), static_cast<unsigned long>(nData), timestamp, 1);
 }
 
 /** Pushes one sample with an explicit time stamp in the lsl_local_clock() domain. */

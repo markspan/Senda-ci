@@ -27,7 +27,7 @@ object LslNative {
         maxBuffered: Int,
     ): Long
 
-    external fun pushChunk(handle: Long, data: FloatArray): Int
+    external fun pushChunk(handle: Long, data: FloatArray, timestamp: Double): Int
     external fun pushSample(handle: Long, data: FloatArray, timestamp: Double): Int
     external fun haveConsumers(handle: Long): Boolean
     external fun destroyOutlet(handle: Long)
@@ -68,14 +68,18 @@ class LslOutlet(
     }
 
     /**
-     * Pushes one or more samples of [channelCount] values each, multiplexed. liblsl assigns the
-     * time stamps (see `pushChunk` in lsl_jni.cpp).
+     * Pushes one or more samples of [channelCount] values each, multiplexed. The last sample is
+     * stamped [lastTimestamp] (seconds, `lsl_local_clock` domain), or the current time when it is
+     * 0; liblsl spaces the earlier samples back by the nominal rate (see `pushChunk` in lsl_jni.cpp).
      */
     @Synchronized
-    fun push(data: FloatArray) {
+    fun pushChunk(data: FloatArray, lastTimestamp: Double = 0.0) {
         val h = handle
-        if (h != 0L && data.isNotEmpty()) LslNative.pushChunk(h, data)
+        if (h != 0L && data.isNotEmpty()) LslNative.pushChunk(h, data, lastTimestamp)
     }
+
+    /** [pushChunk] stamped at push time. */
+    fun push(data: FloatArray) = pushChunk(data)
 
     /** Pushes a single sample stamped with [timestamp] (seconds, `lsl_local_clock` domain). */
     @Synchronized

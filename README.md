@@ -36,13 +36,14 @@ Every sensor the phone reports is listed, with its channel count, unit, maximum 
 - **Sensor rate**: 10, 25, 50, 100 or 200 Hz, or *Max* (the fastest the sensor allows). This
   applies to continuous sensors; on-change sensors (light, proximity, steps, …) stream at an
   irregular rate.
-- Samples carry the sensor's own hardware time stamp, converted to the LSL clock, so Android's
-  event delivery jitter does not end up in the recording.
+- Samples carry the sensor's own hardware time stamp, converted to the LSL clock (see
+  [Time stamps](#time-stamps)).
 
 ### Microphone
 
 Mono audio, float32, full scale ±1, at 8000, 16000, 22050, 44100 or 48000 Hz
-(`Audio <phone model>`, type `Audio`).
+(`Audio <phone model>`, type `Audio`). Samples are stamped with their capture time as the phone
+reports it (see [Time stamps](#time-stamps)).
 
 ### Polar H10
 
@@ -60,6 +61,30 @@ app (middle screenshot above):
 connection drops, Sensorium reconnects by itself; the LSL outlets stay up meanwhile, so the
 recording continues.
 
+## Time stamps
+
+All streams are stamped on the phone's LSL clock (`lsl_local_clock()`). LabRecorder measures the
+offset between that clock and its own and stores it in the XDF file, so after loading (pyxdf,
+xdf-Matlab, MNE, EEGLAB) the phone's streams line up with each other and with streams from other
+devices, such as EEG or stimulus markers.
+
+Following the [LSL advice](https://labstreaminglayer.readthedocs.io/info/faqs.html), each sample is
+stamped with the moment it was measured where the phone knows it, rather than the moment it reached
+Sensorium:
+
+| Stream | Time stamp | What remains |
+|---|---|---|
+| Phone sensors | The sensor's hardware time stamp, converted to the LSL clock | Nothing, apart from the sensor's own filtering delay |
+| Microphone | The capture time the phone reports (`AudioRecord.getTimestamp`) for the last sample of each 20 ms block; earlier samples are spaced by the sample rate | Nothing, apart from analog/ADC delay. Without a reported capture time the block is stamped on arrival instead |
+| Polar H10 | Arrival time on the phone of each Bluetooth packet, for its last sample; earlier samples are spaced by the sample rate | The H10's buffering and the Bluetooth transfer: a delay of some tens of ms that varies from packet to packet |
+
+The H10 has its own clock, which LSL cannot synchronise with directly. The arrival times are
+therefore passed on unsmoothed, as LSL recommends. The packet-to-packet jitter is removed when
+loading the XDF file with dejittering on (the default in pyxdf, `dejitter_timestamps=True`), which
+fits a straight line through the time stamps of each regular stream. The average Bluetooth delay
+stays in the data; for analyses that need the H10 aligned to the millisecond, record a shared sync
+event (for example a tap on the strap that also shows in the phone accelerometer).
+
 ## Install
 
 Download `Sensorium-<version>-release.apk` from the
@@ -68,7 +93,7 @@ Download `Sensorium-<version>-release.apk` from the
 Copy it to the phone and open it (allow "install unknown apps"), or:
 
 ```bash
-adb install -r Sensorium-1.0.0-release.apk
+adb install -r Sensorium-1.0.1-release.apk
 ```
 
 Requires Android 8.0 (API 26) or newer. Bluetooth LE is only needed for the Polar H10.
