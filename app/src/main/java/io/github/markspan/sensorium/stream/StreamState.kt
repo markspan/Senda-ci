@@ -59,6 +59,9 @@ object StreamState {
     val polarAccPreview = PreviewBuffer(channels = 3, capacity = 200 * 5)
     val audioPreview = PreviewBuffer(channels = 1, capacity = 1000)
 
+    /** GPS fixes for the map: latitude, longitude, accuracy (m); the last 3600 fixes. */
+    val locationTrack = PreviewBuffer(channels = 3, capacity = 3600)
+
     /**
      * High-rate counters are kept outside the state flow (sensor and audio threads would
      * otherwise publish a new UI state hundreds of times a second); the service copies them
@@ -87,7 +90,7 @@ object StreamState {
     }
 
     fun reset() {
-        listOf(ecgPreview, polarAccPreview, audioPreview).forEach { it.clear() }
+        listOf(ecgPreview, polarAccPreview, audioPreview, locationTrack).forEach { it.clear() }
         synchronized(this) { sensorPreviews = emptyList() }
         phoneSamples.set(0)
         audioSamples.set(0)

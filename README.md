@@ -78,6 +78,12 @@ metres a phone's GPS is accurate to. Each sample is stamped with the time of the
 the LSL clock (on arrival with *Stamp on arrival*). It needs the precise location permission, and
 location switched on in the phone's settings.
 
+While it streams, a **GPS map** card shows the track (the last 3600 fixes), the latest position
+and its accuracy circle on an interactive [OpenStreetMap](https://www.openstreetmap.org) map:
+drag and pinch to move and zoom; **Follow** centres it on the latest fix again. The map tiles
+are downloaded from the OpenStreetMap tile servers, so the map needs internet, and those servers
+see which area you are looking at. The streamed data never leaves the LSL network.
+
 ### Polar H10
 
 The ECG and accelerometer streams of PolarMobile and the

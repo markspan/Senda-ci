@@ -57,6 +57,7 @@ import io.github.markspan.sensorium.stream.SensorPreview
 import io.github.markspan.sensorium.stream.StreamService
 import io.github.markspan.sensorium.stream.StreamState
 import io.github.markspan.sensorium.stream.StreamUiState
+import io.github.markspan.sensorium.ui.GpsMap
 import io.github.markspan.sensorium.ui.SignalView
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -101,6 +102,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var streamButton: MaterialButton
     private var wasRunning = false
     private var shownPreviewKeys: List<String> = emptyList()
+    private lateinit var gpsMap: GpsMap
+    private var shownFixes = -1L
 
     private val scanPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -120,7 +123,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        GpsMap.configure(this) // before the MapView is inflated
         setContentView(R.layout.activity_main)
+        gpsMap = GpsMap(findViewById(R.id.map), StreamState.locationTrack, findViewById(R.id.followMap))
 
         sensorRate = findViewById(R.id.sensorRate)
         audioSwitch = findViewById(R.id.audioSwitch)
@@ -232,8 +237,14 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.copyAddress).isEnabled = addresses.isNotEmpty()
     }
 
+    override fun onResume() {
+        super.onResume()
+        gpsMap.onResume()
+    }
+
     override fun onPause() {
         super.onPause()
+        gpsMap.onPause()
         stopScan()
         saveSettings()
     }
@@ -530,6 +541,7 @@ class MainActivity : AppCompatActivity() {
         // While streaming, the phone's IP address is the first thing on screen.
         findViewById<View>(R.id.addressCard).visibility = if (s.running) View.VISIBLE else View.GONE
         if (s.running && !wasRunning) {
+            gpsMap.reset()
             showNetwork()
             findViewById<NestedScrollView>(R.id.scroll).smoothScrollTo(0, 0)
         }
@@ -563,6 +575,13 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.polarAccView).visibility = if (polar && accSwitch.isChecked) View.VISIBLE else View.GONE
         findViewById<View>(R.id.previewCard).visibility =
             if (sensorPreviews.isNotEmpty() || (s.running && s.audio) || polar) View.VISIBLE else View.GONE
+
+        val showMap = s.running && s.location
+        findViewById<View>(R.id.mapCard).visibility = if (showMap) View.VISIBLE else View.GONE
+        if (showMap && s.locationFixes != shownFixes) {
+            shownFixes = s.locationFixes
+            gpsMap.update()
+        }
     }
 
     /** One plot per streaming phone sensor; rebuilt only when the set of sensors changes. */

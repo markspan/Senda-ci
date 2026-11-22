@@ -23,6 +23,9 @@
     <string name="stream_location">GPS position</string>
     <string name="location_rate">GPS rate (Hz)</string>
     <string name="location_hint">Latitude, longitude, altitude, accuracy, speed and bearing, one sample per GPS fix. Most phones deliver at most 1 fix per second, whatever the rate. Works best outdoors; needs precise location permission.</string>
+    <string name="map">GPS map</string>
+    <string name="follow">Follow</string>
+    <string name="map_hint">Drag and pinch to move and zoom; Follow centres the map on the latest fix again. Map tiles come from OpenStreetMap over the internet.</string>
     <string name="location_permission_needed">Precise location permission is required for the GPS stream.</string>
 
     <!-- Polar -->

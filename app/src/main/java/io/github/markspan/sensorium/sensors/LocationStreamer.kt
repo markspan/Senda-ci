@@ -87,6 +87,7 @@ class LocationStreamer(
             )
             val ts = if (arrivalStamps) null else fixTime(location.elapsedRealtimeNanos)
             if (ts == null) out.push(values) else out.push(values, ts)
+            StreamState.locationTrack.add(floatArrayOf(values[0], values[1], values[3]))
             val text = LocationFormat.describe(
                 location.latitude, location.longitude, location.accuracy.takeIf { location.hasAccuracy() },
             )
