@@ -137,7 +137,22 @@ class MainActivity : AppCompatActivity() {
 
         phoneSensors = PhoneSensors.list(this)
         restoreSettings()
-        buildSensorList()
+        val silent = PhoneSensors.silentKeys
+        if (silent != null || StreamState.state.value.running) {
+            phoneSensors = phoneSensors.filterNot { it.key in silent.orEmpty() }
+            buildSensorList()
+        } else {
+            // Hide sensors that send nothing; the list appears once they have been checked.
+            findViewById<TextView>(R.id.noSensors).apply {
+                setText(R.string.checking_sensors)
+                visibility = View.VISIBLE
+            }
+            PhoneSensors.probe(this, phoneSensors) { silentKeys ->
+                if (isDestroyed) return@probe
+                phoneSensors = phoneSensors.filterNot { it.key in silentKeys }
+                buildSensorList()
+            }
+        }
 
         findViewById<View>(R.id.copyAddress).setOnClickListener { copyKnownPeers() }
         findViewById<View>(R.id.selectAll).setOnClickListener { setAllSensors(true) }
@@ -279,7 +294,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildSensorList() {
         val container = findViewById<LinearLayout>(R.id.sensorList)
-        findViewById<View>(R.id.noSensors).visibility = if (phoneSensors.isEmpty()) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.noSensors).apply {
+            setText(R.string.no_sensors)
+            visibility = if (phoneSensors.isEmpty()) View.VISIBLE else View.GONE
+        }
         phoneSensors.forEach { ps ->
             val row = layoutInflater.inflate(R.layout.item_sensor, container, false)
             row.findViewById<TextView>(R.id.sensorTitle).text = ps.title

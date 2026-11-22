@@ -23,13 +23,25 @@ the screen off, liblsl 1.17, and the Polar H10 support of
 
 ### Phone sensors
 
-Every sensor the phone reports is listed, with its channel count, unit, maximum rate and vendor
+The phone's sensors are listed, with their channel count, unit, maximum rate and vendor
 (left screenshot above). Switch on the ones you want, or use **All** / **None**.
 
 - Accelerometer, gyroscope, magnetometer, gravity, linear acceleration, the rotation vectors,
   light, proximity, barometer, temperature, humidity, step counter/detector, heart rate, hinge
-  angle, head tracker, and the uncalibrated variants. Vendor-specific sensors without a known
-  layout are streamed with generic `ch1..chN` channels.
+  angle, and the motion and off-body detectors. Vendor-specific sensors without a known layout
+  are streamed with generic `ch1..chN` channels.
+- **One sensor per type.** Many phones report a type more than once: a vendor and an Android
+  (AOSP) version of gravity, linear acceleration or the rotation vectors, a wake-up copy, a
+  second accelerometer in a foldable. Only the one Android uses by default is listed.
+- **Not listed**: the uncalibrated and limited-axes variants of the accelerometer, gyroscope and
+  magnetometer, the head tracker, 6-DOF pose and heading sensors, one-shot sensors (significant
+  motion, wake gestures) and vendor-private types.
+- **Only sensors that send data.** When the app starts, Sensorium listens to each sensor for up
+  to 1.5 s (*Checking which sensors send data…*) and leaves out those that stay silent: phones
+  sometimes report sensors without working hardware behind them, such as a hinge angle on a phone
+  without a hinge. Sensors that only report when something happens (step detector, motion
+  detectors) are always listed, as are heart rate and the step counter until their permission
+  has been granted.
 - One LSL outlet per sensor, named `<Sensor> <phone model>`, e.g. `Accelerometer Pixel 8`.
 - Every channel has a label and a unit in the stream meta-data, and the stream type is
   meaningful (`Accelerometer`, `Gyroscope`, `Orientation`, `Light`, …).

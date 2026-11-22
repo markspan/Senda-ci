@@ -9,6 +9,7 @@
     <string name="sensor_rate">Sensor rate (Hz)</string>
     <string name="sensor_rate_max">Max</string>
     <string name="no_sensors">This phone reports no streamable sensors.</string>
+    <string name="checking_sensors">Checking which sensors send data…</string>
     <string name="sensor_rate_hint">Applies to continuous sensors; on-change sensors (light, proximity, steps…) stream at an irregular rate.</string>
 
     <!-- Audio -->

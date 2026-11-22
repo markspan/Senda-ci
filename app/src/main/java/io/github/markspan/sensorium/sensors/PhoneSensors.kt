@@ -1,12 +1,15 @@
 package io.github.markspan.sensorium.sensors
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.os.SystemClock
 import io.github.markspan.sensorium.lsl.IRREGULAR_RATE
 import io.github.markspan.sensorium.lsl.LslNative
@@ -31,30 +34,139 @@ data class PhoneSensor(
 object PhoneSensors {
 
     /**
-     * All sensors on this phone that make sense as a stream: one-shot sensors (significant
-     * motion, wake gestures) and vendor-private types are skipped, and a wake-up variant is only
-     * listed when the phone has no regular variant of that type.
+     * Variants of the basic motion sensors that are rarely wanted in a recording: uncalibrated
+     * and limited-axes copies, and sensors that need special hardware or setup (head tracker,
+     * 6-DOF pose, heading).
+     */
+    val HIDDEN_TYPES: Set<Int> = setOf(
+        Sensor.TYPE_ACCELEROMETER_UNCALIBRATED,
+        Sensor.TYPE_GYROSCOPE_UNCALIBRATED,
+        Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED,
+        Sensor.TYPE_ACCELEROMETER_LIMITED_AXES,
+        Sensor.TYPE_GYROSCOPE_LIMITED_AXES,
+        Sensor.TYPE_ACCELEROMETER_LIMITED_AXES_UNCALIBRATED,
+        Sensor.TYPE_GYROSCOPE_LIMITED_AXES_UNCALIBRATED,
+        Sensor.TYPE_HEAD_TRACKER,
+        Sensor.TYPE_POSE_6DOF,
+        Sensor.TYPE_HEADING,
+    )
+
+    /**
+     * The sensors on this phone that make sense as a stream, one per sensor type. Skipped are
+     * one-shot sensors (significant motion, wake gestures), vendor-private types and
+     * [HIDDEN_TYPES]. Where the phone has several sensors of one type (a vendor and an Android
+     * version of gravity, say, or a wake-up copy), the one Android uses by default is listed.
      */
     fun list(context: Context): List<PhoneSensor> {
         val sm = context.getSystemService(SensorManager::class.java) ?: return emptyList()
         val all = sm.getSensorList(Sensor.TYPE_ALL)
             .filter { it.reportingMode != Sensor.REPORTING_MODE_ONE_SHOT }
-            .filter { it.type in 1 until Sensor.TYPE_DEVICE_PRIVATE_BASE }
-        val regularTypes = all.filterNot { it.isWakeUpSensor }.map { it.type }.toSet()
-        val usable = all.filter { !it.isWakeUpSensor || it.type !in regularTypes }
-        val seen = mutableSetOf<String>()
-        return usable
+            .filter { it.type in 1 until Sensor.TYPE_DEVICE_PRIVATE_BASE && it.type !in HIDDEN_TYPES }
+        return onePerType(
+            all,
+            type = { it.type },
+            isDefault = { it == sm.getDefaultSensor(it.type, false) || it == sm.getDefaultSensor(it.type, true) },
+            isWakeUp = { it.isWakeUpSensor },
+        )
             .sortedWith(compareBy({ order(it.type) }, { it.type }, { it.name }))
-            .mapNotNull { s ->
-                val key = keyOf(s)
-                if (!seen.add(key)) return@mapNotNull null
+            .map { s ->
                 val spec = SensorCatalog.specFor(s.type)
-                val sameType = usable.count { it.type == s.type } > 1
-                val title = (spec?.title ?: SensorCatalog.specFor(s.type, s.stringType, 0).title) +
-                    if (sameType) " · ${s.name}" else ""
-                PhoneSensor(key, s, title, describe(s, spec))
+                val title = spec?.title ?: SensorCatalog.specFor(s.type, s.stringType, 0).title
+                PhoneSensor(keyOf(s), s, title, describe(s, spec))
             }
     }
+
+    /**
+     * Picks one sensor per type, keeping the original order. Preferred, in turn: the default
+     * non-wake-up sensor of the type, the default wake-up sensor, the first non-wake-up sensor,
+     * the first sensor.
+     */
+    fun <T> onePerType(
+        sensors: List<T>,
+        type: (T) -> Int,
+        isDefault: (T) -> Boolean,
+        isWakeUp: (T) -> Boolean,
+    ): List<T> {
+        val chosen = sensors.groupBy(type).mapValues { (_, group) ->
+            group.firstOrNull { isDefault(it) && !isWakeUp(it) }
+                ?: group.firstOrNull(isDefault)
+                ?: group.firstOrNull { !isWakeUp(it) }
+                ?: group.first()
+        }
+        return sensors.filter { chosen[type(it)] === it }
+    }
+
+    /**
+     * Whether [probe] can tell that a sensor works: continuous sensors report at their rate, and
+     * on-change sensors report their current value as soon as they are switched on. Special
+     * trigger sensors (step detector, motion detectors) only report when the event happens, and
+     * sensors behind a runtime permission that is not granted report nothing; those are not probed.
+     */
+    fun probeable(reportingMode: Int, permissionGranted: Boolean) = permissionGranted &&
+        (reportingMode == Sensor.REPORTING_MODE_CONTINUOUS || reportingMode == Sensor.REPORTING_MODE_ON_CHANGE)
+
+    private fun requiredPermission(type: Int): String? = when (type) {
+        Sensor.TYPE_HEART_RATE, Sensor.TYPE_HEART_BEAT -> Manifest.permission.BODY_SENSORS
+        Sensor.TYPE_STEP_COUNTER, Sensor.TYPE_STEP_DETECTOR ->
+            if (android.os.Build.VERSION.SDK_INT >= 29) Manifest.permission.ACTIVITY_RECOGNITION else null
+        else -> null
+    }
+
+    /** Keys of the sensors that sent nothing during [probe]; null until probed in this process. */
+    @Volatile
+    var silentKeys: Set<String>? = null
+        private set
+
+    /**
+     * Listens briefly to each probeable sensor of [sensors] and reports, on the main thread, the
+     * keys of those that sent nothing: sensors the phone lists without real hardware behind them
+     * (a hinge angle on a phone without a hinge, say). The result is kept for the process.
+     */
+    fun probe(context: Context, sensors: List<PhoneSensor>, onDone: (Set<String>) -> Unit) {
+        silentKeys?.let { onDone(it); return }
+        val sm = context.getSystemService(SensorManager::class.java)
+        val candidates = sensors.filter { ps ->
+            val permission = requiredPermission(ps.sensor.type)
+            probeable(
+                ps.sensor.reportingMode,
+                permission == null || context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
+            )
+        }
+        if (sm == null || candidates.isEmpty()) {
+            silentKeys = emptySet()
+            onDone(emptySet())
+            return
+        }
+        val main = Handler(Looper.getMainLooper())
+        val thread = HandlerThread("sensorium-probe").apply { start() }
+        val handler = Handler(thread.looper)
+        val heard = HashSet<Sensor>() // only touched on the probe thread
+        var finished = false
+        lateinit var listener: SensorEventListener
+
+        fun finish() {
+            if (finished) return
+            finished = true
+            sm.unregisterListener(listener)
+            thread.quitSafely()
+            val silent = candidates.filter { it.sensor !in heard }.map { it.key }.toSet()
+            silentKeys = silent
+            main.post { onDone(silent) }
+        }
+
+        listener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                if (heard.add(event.sensor) && heard.size == candidates.size) finish()
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) = Unit
+        }
+        candidates.forEach { sm.registerListener(listener, it.sensor, PROBE_PERIOD_US, handler) }
+        handler.postDelayed({ finish() }, PROBE_TIMEOUT_MS)
+    }
+
+    private const val PROBE_PERIOD_US = 20_000
+    private const val PROBE_TIMEOUT_MS = 1500L
 
     fun keyOf(s: Sensor) = "${s.type}|${s.name}|${if (s.isWakeUpSensor) "w" else ""}"
 
@@ -152,9 +264,7 @@ class PhoneSensorStreamer(
         outlets.values.sortedBy { it.name }.map { OutletInfo(it.name, it.type, it.hasConsumers) }
 
     private fun createOutlet(sensor: Sensor, spec: SensorSpec): LslOutlet? = try {
-        val sameType = sensors.count { it.sensor.type == sensor.type } > 1
-        val suffix = if (sameType) " ${sensor.name}" else ""
-        val name = "${spec.streamName}$suffix $deviceName"
+        val name = "${spec.streamName} $deviceName"
         val nominal = when {
             !PhoneSensors.isContinuous(sensor) -> IRREGULAR_RATE
             sensor.minDelay > 0 && rateHz > 0 -> minOf(rateHz.toDouble(), 1_000_000.0 / sensor.minDelay)
