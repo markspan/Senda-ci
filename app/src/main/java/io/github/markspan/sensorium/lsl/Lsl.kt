@@ -47,6 +47,7 @@ const val IRREGULAR_RATE = 0.0
 const val TIMESTAMPS_SENSOR = "sensor hardware time stamp, converted to lsl_local_clock"
 const val TIMESTAMPS_CAPTURE = "audio capture time (AudioRecord.getTimestamp), converted to lsl_local_clock"
 const val TIMESTAMPS_ARRIVAL = "lsl_local_clock on arrival in the app"
+const val TIMESTAMPS_LOCATION = "GPS fix time (Location.getElapsedRealtimeNanos), converted to lsl_local_clock"
 const val TIMESTAMPS_BLE_ARRIVAL = "lsl_local_clock on arrival of each Bluetooth packet (last sample), earlier samples at the nominal rate; samples of lost packets are NaN"
 
 /** A float32 LSL stream outlet. */

@@ -24,6 +24,10 @@ data class StreamUiState(
     val phoneSamples: Long = 0,
     val audio: Boolean = false,
     val audioSamples: Long = 0,
+    val location: Boolean = false,
+    val locationFixes: Long = 0,
+    /** Latest fix for the status card, e.g. `52.21573, 6.89340 ±4 m`. */
+    val locationFix: String? = null,
     // Polar H10
     val polarDevice: String? = null,
     val polarStatus: String? = null,

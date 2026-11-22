@@ -18,6 +18,12 @@
     <string name="audio_rate">Sample rate (Hz)</string>
     <string name="audio_permission_needed">Microphone permission is required for the audio stream.</string>
 
+    <!-- GPS -->
+    <string name="location">Location</string>
+    <string name="stream_location">GPS position · about 1 Hz</string>
+    <string name="location_hint">Latitude, longitude, altitude, accuracy, speed and bearing, one sample per GPS fix. Works best outdoors; needs precise location permission.</string>
+    <string name="location_permission_needed">Precise location permission is required for the GPS stream.</string>
+
     <!-- Polar -->
     <string name="polar_h10">Polar H10</string>
     <string name="timestamps">Time stamps</string>
@@ -57,7 +63,7 @@
 
     <!-- About -->
     <string name="about">About</string>
-    <string name="about_description">Streams the sensors of this phone, its microphone and a Polar H10 chest strap (ECG and accelerometer) to Lab Streaming Layer.</string>
+    <string name="about_description">Streams the sensors of this phone, its microphone and a Polar H10 chest strap (ECG and accelerometer), and its GPS position, to Lab Streaming Layer.</string>
     <string name="about_history">Sensorium grew out of SENDA by Ali Ayub Khan (NeuropsyOL, University of Oldenburg), rewritten with the Polar H10 support of PolarMobile.</string>
     <string name="about_author_name">Mark M. Span</string>
     <string name="about_author_roles">Scientific Advisor, Research Support, Faculty of Behavioural and Social Sciences\nLecturer, Experimental Psychology\nUniversity of Groningen, the Netherlands</string>

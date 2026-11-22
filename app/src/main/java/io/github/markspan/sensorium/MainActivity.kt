@@ -77,6 +77,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioSwitch: MaterialSwitch
     private lateinit var audioRate: AutoCompleteTextView
 
+    // GPS
+    private lateinit var locationSwitch: MaterialSwitch
+
     // Polar
     private val devices = mutableListOf<FoundDevice>()
     private var selected: String? = null
@@ -120,6 +123,7 @@ class MainActivity : AppCompatActivity() {
         sensorRate = findViewById(R.id.sensorRate)
         audioSwitch = findViewById(R.id.audioSwitch)
         audioRate = findViewById(R.id.audioRate)
+        locationSwitch = findViewById(R.id.locationSwitch)
         polarSwitch = findViewById(R.id.polarSwitch)
         scanButton = findViewById(R.id.scanButton)
         scanProgress = findViewById(R.id.scanProgress)
@@ -241,6 +245,7 @@ class MainActivity : AppCompatActivity() {
         setupDropdown(sensorRate, SensorCatalog.RATES, prefs.getInt("sensorRate", SensorCatalog.DEFAULT_RATE))
         audioSwitch.isChecked = prefs.getBoolean("audio", false)
         setupDropdown(audioRate, AudioStreamer.RATES, prefs.getInt("audioRate", AudioStreamer.DEFAULT_RATE))
+        locationSwitch.isChecked = prefs.getBoolean("location", false)
 
         polarSwitch.isChecked = prefs.getBoolean("polar", false)
         arrivalSwitch.isChecked = prefs.getBoolean("arrivalStamps", false)
@@ -261,6 +266,7 @@ class MainActivity : AppCompatActivity() {
         putInt("sensorRate", dropdownValue(sensorRate, SensorCatalog.DEFAULT_RATE))
         putBoolean("audio", audioSwitch.isChecked)
         putInt("audioRate", dropdownValue(audioRate, AudioStreamer.DEFAULT_RATE))
+        putBoolean("location", locationSwitch.isChecked)
         putBoolean("polar", polarSwitch.isChecked)
         putBoolean("arrivalStamps", arrivalSwitch.isChecked)
         putBoolean("ecg", ecgSwitch.isChecked)
@@ -424,6 +430,11 @@ class MainActivity : AppCompatActivity() {
     /** Runtime permissions the selected streams need and that are not granted yet. */
     private fun missingStreamPermissions(): List<String> = buildList {
         if (audioSwitch.isChecked) add(Manifest.permission.RECORD_AUDIO)
+        // Android 12+ only grants precise location when coarse is asked for alongside it.
+        if (locationSwitch.isChecked) {
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
         val types = selectedPhoneSensors().map { it.sensor.type }.toSet()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
             (Sensor.TYPE_STEP_COUNTER in types || Sensor.TYPE_STEP_DETECTOR in types)
@@ -437,7 +448,9 @@ class MainActivity : AppCompatActivity() {
             startService(Intent(this, StreamService::class.java).setAction(StreamService.ACTION_STOP))
             return
         }
-        if (selectedPhoneSensors().isEmpty() && !audioSwitch.isChecked && !polarSwitch.isChecked) {
+        if (selectedPhoneSensors().isEmpty() && !audioSwitch.isChecked && !locationSwitch.isChecked &&
+            !polarSwitch.isChecked
+        ) {
             snackbar(getString(R.string.nothing_selected))
             return
         }
@@ -465,10 +478,12 @@ class MainActivity : AppCompatActivity() {
         }.map { it.key }
         val audio = audioSwitch.isChecked && granted(Manifest.permission.RECORD_AUDIO)
         if (audioSwitch.isChecked && !audio) snackbar(getString(R.string.audio_permission_needed))
+        val location = locationSwitch.isChecked && granted(Manifest.permission.ACCESS_FINE_LOCATION)
+        if (locationSwitch.isChecked && !location) snackbar(getString(R.string.location_permission_needed))
         val device = devices.firstOrNull { it.address == selected }
             ?.takeIf { polarSwitch.isChecked && blePermissions().all(::granted) }
         if (polarSwitch.isChecked && device == null) snackbar(getString(R.string.permissions_needed))
-        if (sensorKeys.isEmpty() && !audio && device == null) return
+        if (sensorKeys.isEmpty() && !audio && !location && device == null) return
 
         val intent = Intent(this, StreamService::class.java)
             .setAction(StreamService.ACTION_START)
@@ -477,6 +492,7 @@ class MainActivity : AppCompatActivity() {
             .putExtra(StreamService.EXTRA_SENSORS, sensorKeys.toTypedArray())
             .putExtra(StreamService.EXTRA_SENSOR_RATE, dropdownValue(sensorRate, SensorCatalog.DEFAULT_RATE))
             .putExtra(StreamService.EXTRA_AUDIO_RATE, if (audio) dropdownValue(audioRate, AudioStreamer.DEFAULT_RATE) else 0)
+            .putExtra(StreamService.EXTRA_LOCATION, location)
             .putExtra(StreamService.EXTRA_ARRIVAL_STAMPS, arrivalSwitch.isChecked)
         if (device != null) {
             prefs.edit {
@@ -506,6 +522,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.detailText).text = buildList {
             if (s.phoneSensors > 0) add("${s.phoneSensors} phone sensors · ${s.phoneSamples} samples")
             if (s.audio) add("Audio · ${s.audioSamples} samples")
+            if (s.location) add("GPS · ${s.locationFixes} fixes · ${s.locationFix ?: "waiting for a fix…"}")
             if (s.running && s.polarDevice != null) {
                 add(
                     listOfNotNull(
@@ -559,6 +576,8 @@ class MainActivity : AppCompatActivity() {
         audioSwitch.isEnabled = idle
         findViewById<View>(R.id.audioRateLayout).isEnabled = idle && audioSwitch.isChecked
         audioRate.isEnabled = idle && audioSwitch.isChecked
+
+        locationSwitch.isEnabled = idle
 
         polarSwitch.isEnabled = idle
         findViewById<View>(R.id.polarOptions).visibility = if (polarSwitch.isChecked) View.VISIBLE else View.GONE

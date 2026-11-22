@@ -20,10 +20,11 @@ import io.github.markspan.sensorium.MainActivity
 import io.github.markspan.sensorium.R
 import io.github.markspan.sensorium.ble.PolarH10Client
 import io.github.markspan.sensorium.sensors.AudioStreamer
+import io.github.markspan.sensorium.sensors.LocationStreamer
 import io.github.markspan.sensorium.sensors.PhoneSensorStreamer
 
 /**
- * Foreground service that owns all LSL outlets (phone sensors, microphone, Polar H10), so
+ * Foreground service that owns all LSL outlets (phone sensors, microphone, GPS, Polar H10), so
  * streaming continues with the screen off.
  */
 class StreamService : Service() {
@@ -31,6 +32,7 @@ class StreamService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private var sensors: PhoneSensorStreamer? = null
     private var audio: AudioStreamer? = null
+    private var location: LocationStreamer? = null
     private var polar: PolarStreamer? = null
     private var running = false
 
@@ -55,9 +57,10 @@ class StreamService : Service() {
         val audioRate = intent.getIntExtra(EXTRA_AUDIO_RATE, 0)
         val polarAddress = intent.getStringExtra(EXTRA_POLAR_ADDRESS)
         val arrivalStamps = intent.getBooleanExtra(EXTRA_ARRIVAL_STAMPS, false)
+        val withLocation = intent.getBooleanExtra(EXTRA_LOCATION, false)
 
         running = true
-        goForeground(withMicrophone = audioRate > 0)
+        goForeground(withMicrophone = audioRate > 0, withLocation = withLocation)
         acquireLocks()
         StreamState.reset()
         StreamState.update {
@@ -81,6 +84,13 @@ class StreamService : Service() {
             audio = null
             StreamState.message("Microphone: ${e.message}")
         }
+        if (withLocation) try {
+            location = LocationStreamer(this, deviceName, sourcePrefix, arrivalStamps).also { it.start() }
+        } catch (e: Throwable) {
+            location?.stop()
+            location = null
+            StreamState.message("GPS: ${e.message}")
+        }
         if (polarAddress != null) try {
             polar = PolarStreamer(
                 this, polarAddress, intent.getStringExtra(EXTRA_POLAR_NAME) ?: "Polar H10",
@@ -98,13 +108,16 @@ class StreamService : Service() {
             StreamState.message("Polar H10: ${e.message}")
         }
 
-        if (sensors == null && audio == null && polar == null) {
+        if (sensors == null && audio == null && location == null && polar == null) {
             StreamState.message("Nothing to stream")
             stop()
             return
         }
         StreamState.update {
-            it.copy(status = "Streaming", phoneSensors = sensors?.sensorCount ?: 0, audio = audio != null)
+            it.copy(
+                status = "Streaming", phoneSensors = sensors?.sensorCount ?: 0, audio = audio != null,
+                location = location != null,
+            )
         }
         updateNotification()
         main.post(poll)
@@ -115,7 +128,7 @@ class StreamService : Service() {
         override fun run() {
             if (!running) return
             val outlets = sensors?.outletInfos().orEmpty() + audio?.outletInfos().orEmpty() +
-                polar?.outletInfos().orEmpty()
+                location?.outletInfos().orEmpty() + polar?.outletInfos().orEmpty()
             StreamState.update {
                 it.copy(
                     outlets = outlets,
@@ -132,6 +145,7 @@ class StreamService : Service() {
         main.removeCallbacksAndMessages(null)
         sensors?.stop(); sensors = null
         audio?.stop(); audio = null
+        location?.stop(); location = null
         polar?.stop(); polar = null
         releaseLocks()
         StreamState.update {
@@ -148,7 +162,7 @@ class StreamService : Service() {
 
     // --- foreground notification -------------------------------------------------------------
 
-    private fun goForeground(withMicrophone: Boolean) {
+    private fun goForeground(withMicrophone: Boolean, withLocation: Boolean) {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW)
@@ -159,6 +173,7 @@ class StreamService : Service() {
             if (withMicrophone && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             }
+            if (withLocation) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), type)
     }
@@ -168,6 +183,7 @@ class StreamService : Service() {
         return buildList {
             if (s.phoneSensors > 0) add("${s.phoneSensors} sensors")
             if (s.audio) add("audio")
+            if (s.location) add("GPS")
             s.polarDevice?.let { add("H10: ${s.polarStatus ?: "…"}") }
         }.joinToString(" · ").ifEmpty { "Starting…" } +
             LanAddresses.list().takeIf { it.isNotEmpty() }
@@ -235,6 +251,8 @@ class StreamService : Service() {
         const val EXTRA_SENSOR_RATE = "sensorRate"
         /** Microphone sample rate in Hz; 0 = no audio stream. */
         const val EXTRA_AUDIO_RATE = "audioRate"
+        /** Stream the GPS position; the caller has checked ACCESS_FINE_LOCATION. */
+        const val EXTRA_LOCATION = "location"
         /** Polar H10 to stream; absent = no Polar streams. */
         const val EXTRA_POLAR_ADDRESS = "polarAddress"
         const val EXTRA_POLAR_NAME = "polarName"

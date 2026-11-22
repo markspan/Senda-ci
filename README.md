@@ -57,6 +57,25 @@ Mono audio, float32, full scale ±1, at 8000, 16000, 22050, 44100 or 48000 Hz
 (`Audio <phone model>`, type `Audio`). Samples are stamped with their capture time as the phone
 reports it (see [Time stamps](#time-stamps)).
 
+### GPS position
+
+One sample per GPS fix, normally once a second, on an irregular-rate stream
+`Location <phone model>` (type `Location`):
+
+| Channel | Unit | |
+|---|---|---|
+| Latitude, Longitude | degrees | WGS84 |
+| Altitude | m | above the WGS84 ellipsoid (not sea level) |
+| Accuracy | m | horizontal, 68% radius |
+| Speed | m/s | |
+| Bearing | degrees | direction of travel, clockwise from north |
+
+Values the fix does not include are NaN (indoors there is often no fix at all). LSL samples
+are 32-bit floats, which store latitude and longitude to within about 0.5 m: well below the few
+metres a phone's GPS is accurate to. Each sample is stamped with the time of the fix, converted to
+the LSL clock (on arrival with *Stamp on arrival*). It needs the precise location permission, and
+location switched on in the phone's settings.
+
 ### Polar H10
 
 The ECG and accelerometer streams of PolarMobile and the
@@ -93,6 +112,7 @@ Sensorium:
 | Stream | Time stamp | What remains |
 |---|---|---|
 | Phone sensors | The sensor's hardware time stamp, converted to the LSL clock | Nothing, apart from the sensor's own filtering delay |
+| GPS position | The time of the fix (`Location.getElapsedRealtimeNanos`), converted to the LSL clock | The receiver's own processing; a fix more than 10 s from now is stamped on arrival instead |
 | Microphone | The capture time the phone reports (`AudioRecord.getTimestamp`) for the last sample of each 20 ms block; earlier samples are spaced by the sample rate | Nothing, apart from analog/ADC delay. Without a reported capture time the block is stamped on arrival instead |
 | Polar H10 | Arrival time on the phone of each Bluetooth packet, for its last sample; earlier samples are spaced by the sample rate. Samples of lost packets are filled with NaN (see below) | The H10's buffering and the Bluetooth transfer: a delay of some tens of ms that varies from packet to packet |
 
@@ -137,7 +157,7 @@ stamps are still the arrival times, passed on unsmoothed as described above.
 <img src="docs/screenshots/timestamps.png" width="320" align="right" alt="Time stamps card with the Stamp on arrival switch">
 
 The **Time stamps** card has a switch **Stamp on arrival (as SENDA)**. Off (the default) gives
-the time stamps described above. On, phone sensors and the microphone are stamped the way
+the time stamps described above. On, phone sensors, the microphone and the GPS position are stamped the way
 [SENDA](https://github.com/NeuropsyOL/SENDA) stamps them: with `lsl_local_clock()` at the moment
 the data reaches the app. Use it to compare with, or continue, recordings made with SENDA;
 otherwise leave it off. The Polar H10 is stamped on arrival in both settings.
@@ -177,7 +197,7 @@ Download `Sensorium-<version>-release.apk` from the
 Copy it to the phone and open it (allow "install unknown apps"), or:
 
 ```bash
-adb install -r Sensorium-1.2.2-release.apk
+adb install -r Sensorium-1.3.0-release.apk
 ```
 
 Requires Android 8.0 (API 26) or newer. Bluetooth LE is only needed for the Polar H10.
@@ -188,7 +208,7 @@ old SENDA instead of replacing it.
 ## Use
 
 1. Switch on the phone sensors you want, and set the sensor rate.
-2. Optionally switch on the **Microphone** and pick a sample rate.
+2. Optionally switch on the **Microphone** and pick a sample rate, and the **GPS position**.
 3. For a Polar H10: moisten the electrodes and put the strap on (it only advertises while worn),
    switch on **Polar H10**, tap **Scan** and select the strap. Choose ECG and/or the
    accelerometer (with its rate and range).
