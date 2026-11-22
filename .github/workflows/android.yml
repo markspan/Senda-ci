@@ -10,6 +10,13 @@ on:
 permissions:
   contents: write # attach the APK to releases on v* tags
 
+# Pushing a commit together with its release tag starts two runs for the same commit. A tag run
+# cancels a branch run of that commit; a branch run never cancels a tag run, it waits instead,
+# so the release APK is always built.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
