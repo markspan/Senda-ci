@@ -52,6 +52,7 @@ import io.github.markspan.sensorium.sensors.PhoneSensors
 import io.github.markspan.sensorium.sensors.SensorCatalog
 import io.github.markspan.sensorium.stream.LanAddresses
 import io.github.markspan.sensorium.stream.PacketLoss
+import io.github.markspan.sensorium.stream.SensorPreview
 import io.github.markspan.sensorium.stream.StreamService
 import io.github.markspan.sensorium.stream.StreamState
 import io.github.markspan.sensorium.stream.StreamUiState
@@ -94,6 +95,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var streamButton: MaterialButton
     private var wasRunning = false
+    private var shownPreviewKeys: List<String> = emptyList()
 
     private val scanPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -163,7 +165,6 @@ class MainActivity : AppCompatActivity() {
             it.setOnCheckedChangeListener { _, _ -> updateControls(StreamState.state.value) }
         }
 
-        findViewById<SignalView>(R.id.phoneAccView).bind(StreamState.phoneAccPreview, "Phone accelerometer X / Y / Z (m/s²)")
         findViewById<SignalView>(R.id.audioView).bind(StreamState.audioPreview, "Microphone")
         findViewById<SignalView>(R.id.ecgView).bind(StreamState.ecgPreview, "H10 ECG (µV)")
         findViewById<SignalView>(R.id.polarAccView).bind(StreamState.polarAccPreview, "H10 ACC X / Y / Z (mG)")
@@ -521,15 +522,32 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<TextView>(R.id.messageText).text = s.messages.joinToString("\n")
 
-        val phoneAcc = s.running && s.phoneSensors > 0 &&
-            selectedPhoneSensors().any { it.sensor.type == Sensor.TYPE_ACCELEROMETER }
+        val sensorPreviews = if (s.running) StreamState.sensorPreviews else emptyList()
+        showSensorPreviews(sensorPreviews)
         val polar = s.running && s.polarDevice != null
-        findViewById<View>(R.id.phoneAccView).visibility = if (phoneAcc) View.VISIBLE else View.GONE
         findViewById<View>(R.id.audioView).visibility = if (s.running && s.audio) View.VISIBLE else View.GONE
         findViewById<View>(R.id.ecgView).visibility = if (polar && ecgSwitch.isChecked) View.VISIBLE else View.GONE
         findViewById<View>(R.id.polarAccView).visibility = if (polar && accSwitch.isChecked) View.VISIBLE else View.GONE
         findViewById<View>(R.id.previewCard).visibility =
-            if (phoneAcc || (s.running && s.audio) || polar) View.VISIBLE else View.GONE
+            if (sensorPreviews.isNotEmpty() || (s.running && s.audio) || polar) View.VISIBLE else View.GONE
+    }
+
+    /** One plot per streaming phone sensor; rebuilt only when the set of sensors changes. */
+    private fun showSensorPreviews(previews: List<SensorPreview>) {
+        val keys = previews.map { it.key }
+        if (keys == shownPreviewKeys) return
+        shownPreviewKeys = keys
+        val container = findViewById<LinearLayout>(R.id.sensorPreviews)
+        container.removeAllViews()
+        val density = resources.displayMetrics.density
+        previews.forEach { p ->
+            container.addView(
+                SignalView(this).apply { bind(p.buffer, p.label, p.samples) },
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (90 * density).toInt()).apply {
+                    topMargin = (8 * density).toInt()
+                },
+            )
+        }
     }
 
     private fun updateControls(s: StreamUiState) {

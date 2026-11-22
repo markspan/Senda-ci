@@ -9,6 +9,7 @@ import android.util.TypedValue
 import android.view.View
 import com.google.android.material.color.MaterialColors
 import io.github.markspan.sensorium.stream.PreviewBuffer
+import java.util.concurrent.atomic.AtomicLong
 
 /** Auto-scaling live plot of a [PreviewBuffer]; one trace per channel, redrawn each frame while attached. */
 class SignalView @JvmOverloads constructor(
@@ -22,6 +23,8 @@ class SignalView @JvmOverloads constructor(
         MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary),
         MaterialColors.getColor(this, com.google.android.material.R.attr.colorTertiary),
         MaterialColors.getColor(this, com.google.android.material.R.attr.colorSecondary),
+        MaterialColors.getColor(this, com.google.android.material.R.attr.colorError),
+        MaterialColors.getColor(this, com.google.android.material.R.attr.colorOutline),
     )
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -33,10 +36,16 @@ class SignalView @JvmOverloads constructor(
         textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12f, resources.displayMetrics)
     }
     var label: String = ""
+    private var count: AtomicLong? = null
 
-    fun bind(buffer: PreviewBuffer, label: String) {
+    /**
+     * Plots [buffer] under [label]. With [count], the label also shows that sample count and,
+     * for a single channel, the latest value (useful for slow on-change sensors).
+     */
+    fun bind(buffer: PreviewBuffer, label: String, count: AtomicLong? = null) {
         this.buffer = buffer
         this.label = label
+        this.count = count
         scratch = FloatArray(buffer.channels * buffer.capacity)
         postInvalidateOnAnimation()
     }
@@ -46,7 +55,10 @@ class SignalView @JvmOverloads constructor(
         val buf = buffer ?: return
         val n = buf.snapshot(scratch)
         val ch = buf.channels
-        canvas.drawText(label, 4f, labelPaint.textSize, labelPaint)
+        val text = count?.let { c ->
+            label + " · ${c.get()}" + if (ch == 1 && n > 0) " · ${"%.4g".format(scratch[n - 1])}" else ""
+        } ?: label
+        canvas.drawText(text, 4f, labelPaint.textSize, labelPaint)
         if (n > 1) {
             var min = Float.MAX_VALUE
             var max = -Float.MAX_VALUE
@@ -56,7 +68,8 @@ class SignalView @JvmOverloads constructor(
                 min = minOf(min, v); max = maxOf(max, v)
             }
             if (min > max) { min = 0f; max = 0f } // nothing but NaN
-            val range = (max - min).takeIf { it > 0f } ?: 1f
+            if (max == min) { min -= 0.5f; max += 0.5f } // constant: draw it mid-height
+            val range = max - min
             val top = labelPaint.textSize * 1.4f
             val h = height - top - paddingBottom
             val dx = width.toFloat() / (buf.capacity - 1)

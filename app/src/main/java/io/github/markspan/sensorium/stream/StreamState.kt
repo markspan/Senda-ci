@@ -37,6 +37,11 @@ data class StreamUiState(
     val messages: List<String> = emptyList(),
 )
 
+/** Live preview of one streaming phone sensor: its recent samples and how many were sent. */
+class SensorPreview(val key: String, val label: String, val buffer: PreviewBuffer) {
+    val samples = AtomicLong()
+}
+
 /** Process-wide state shared between [StreamService] and the UI. */
 object StreamState {
     private val _state = MutableStateFlow(StreamUiState())
@@ -45,7 +50,6 @@ object StreamState {
     /** Last seconds of signal for the on-screen preview. */
     val ecgPreview = PreviewBuffer(channels = 1, capacity = 130 * 5)
     val polarAccPreview = PreviewBuffer(channels = 3, capacity = 200 * 5)
-    val phoneAccPreview = PreviewBuffer(channels = 3, capacity = 500)
     val audioPreview = PreviewBuffer(channels = 1, capacity = 1000)
 
     /**
@@ -54,6 +58,19 @@ object StreamState {
      * into the state once a second.
      */
     val phoneSamples = AtomicLong()
+
+    /**
+     * Previews of the streaming phone sensors, in the order they started. Sensors without a known
+     * channel layout are added when their first event arrives.
+     */
+    @Volatile
+    var sensorPreviews: List<SensorPreview> = emptyList()
+        private set
+
+    @Synchronized
+    fun addSensorPreview(preview: SensorPreview) {
+        sensorPreviews = sensorPreviews + preview
+    }
     val audioSamples = AtomicLong()
 
     fun update(transform: (StreamUiState) -> StreamUiState) = _state.update(transform)
@@ -63,7 +80,8 @@ object StreamState {
     }
 
     fun reset() {
-        listOf(ecgPreview, polarAccPreview, phoneAccPreview, audioPreview).forEach { it.clear() }
+        listOf(ecgPreview, polarAccPreview, audioPreview).forEach { it.clear() }
+        synchronized(this) { sensorPreviews = emptyList() }
         phoneSamples.set(0)
         audioSamples.set(0)
     }

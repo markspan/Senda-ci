@@ -17,6 +17,8 @@ import io.github.markspan.sensorium.lsl.LslOutlet
 import io.github.markspan.sensorium.lsl.TIMESTAMPS_ARRIVAL
 import io.github.markspan.sensorium.lsl.TIMESTAMPS_SENSOR
 import io.github.markspan.sensorium.stream.OutletInfo
+import io.github.markspan.sensorium.stream.PreviewBuffer
+import io.github.markspan.sensorium.stream.SensorPreview
 import io.github.markspan.sensorium.stream.StreamState
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
@@ -168,6 +170,24 @@ object PhoneSensors {
     private const val PROBE_PERIOD_US = 20_000
     private const val PROBE_TIMEOUT_MS = 1500L
 
+    /** Plot label, e.g. `Accelerometer X / Y / Z (m/s²)` or `Light (lx)`. */
+    fun previewLabel(title: String, spec: SensorSpec): String {
+        val channels = if (spec.channelCount in 2..6) " " + spec.labels.joinToString(" / ") else ""
+        val unit = spec.units.firstOrNull { it.isNotEmpty() }?.let { " (${it.replace("^2", "²")})" }.orEmpty()
+        return title + channels + unit
+    }
+
+    /**
+     * Preview length in samples: about [PREVIEW_SECONDS] at [nominalRate], or the last
+     * [PREVIEW_EVENTS] events of an irregular (on-change) sensor.
+     */
+    fun previewCapacity(nominalRate: Double): Int =
+        if (nominalRate <= 0) PREVIEW_EVENTS
+        else (nominalRate * PREVIEW_SECONDS).roundToInt().coerceIn(50, 1000)
+
+    private const val PREVIEW_SECONDS = 5
+    private const val PREVIEW_EVENTS = 100
+
     fun keyOf(s: Sensor) = "${s.type}|${s.name}|${if (s.isWakeUpSensor) "w" else ""}"
 
     /** Familiar motion sensors first, then environment, then the rest. */
@@ -224,6 +244,7 @@ class PhoneSensorStreamer(
     private val sm = context.getSystemService(SensorManager::class.java)
     private val sensors = PhoneSensors.list(context).filter { it.key in keys }
     private val outlets = ConcurrentHashMap<Sensor, LslOutlet>()
+    private val previews = ConcurrentHashMap<Sensor, SensorPreview>()
     private val failed = ConcurrentHashMap.newKeySet<Sensor>()
     private var thread: HandlerThread? = null
 
@@ -271,6 +292,7 @@ class PhoneSensorStreamer(
             sensor.minDelay > 0 -> 1_000_000.0 / sensor.minDelay
             else -> rateHz.toDouble()
         }
+        addPreview(sensor, spec, nominal)
         LslOutlet(
             name = name,
             type = spec.lslType,
@@ -290,6 +312,16 @@ class PhoneSensorStreamer(
         null
     }
 
+    private fun addPreview(sensor: Sensor, spec: SensorSpec, nominalRate: Double) {
+        val ps = sensors.firstOrNull { it.sensor == sensor } ?: return
+        val preview = SensorPreview(
+            ps.key, PhoneSensors.previewLabel(ps.title, spec),
+            PreviewBuffer(spec.channelCount, PhoneSensors.previewCapacity(nominalRate)),
+        )
+        previews[sensor] = preview
+        StreamState.addSensorPreview(preview)
+    }
+
     override fun onSensorChanged(event: SensorEvent) {
         val sensor = event.sensor
         val outlet = outlets[sensor] ?: run {
@@ -303,7 +335,10 @@ class PhoneSensorStreamer(
 
         if (arrivalStamps) outlet.push(sample) else outlet.push(sample, toLslTime(event.timestamp))
 
-        if (sensor.type == Sensor.TYPE_ACCELEROMETER) StreamState.phoneAccPreview.add(sample)
+        previews[sensor]?.let {
+            it.buffer.add(sample)
+            it.samples.incrementAndGet()
+        }
         StreamState.phoneSamples.incrementAndGet()
     }
 

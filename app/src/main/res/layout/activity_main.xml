@@ -479,10 +479,11 @@
                         android:layout_height="wrap_content"
                         android:text="@string/preview" />
 
-                    <io.github.markspan.sensorium.ui.SignalView
-                        android:id="@+id/phoneAccView"
+                    <LinearLayout
+                        android:id="@+id/sensorPreviews"
                         android:layout_width="match_parent"
-                        android:layout_height="110dp" />
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
 
                     <io.github.markspan.sensorium.ui.SignalView
                         android:id="@+id/audioView"
