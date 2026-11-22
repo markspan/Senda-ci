@@ -38,6 +38,19 @@ class LocationFormatTest {
     }
 
     @Test
+    fun ratesAndIntervals() {
+        assertEquals(1.0, LocationFormat.DEFAULT_RATE_HZ, 0.0)
+        assertTrue(LocationFormat.DEFAULT_RATE_HZ in LocationFormat.RATES_HZ)
+        assertEquals(10_000L, LocationFormat.intervalMs(0.1))
+        assertEquals(1000L, LocationFormat.intervalMs(1.0))
+        assertEquals(100L, LocationFormat.intervalMs(10.0))
+        assertEquals(
+            listOf("0.1", "0.2", "0.5", "1", "2", "5", "10"),
+            LocationFormat.RATES_HZ.map(LocationFormat::rateLabel),
+        )
+    }
+
+    @Test
     fun statusText() {
         assertEquals("53.21941, 6.56650 ±4 m", LocationFormat.describe(53.219412, 6.5665, 4.2f))
         assertEquals("-33.85678, 151.21530", LocationFormat.describe(-33.856784, 151.215297, null))

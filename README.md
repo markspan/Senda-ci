@@ -59,8 +59,10 @@ reports it (see [Time stamps](#time-stamps)).
 
 ### GPS position
 
-One sample per GPS fix, normally once a second, on an irregular-rate stream
-`Location <phone model>` (type `Location`):
+One sample per GPS fix on an irregular-rate stream `Location <phone model>` (type `Location`).
+**GPS rate**: 0.1, 0.2, 0.5, 1 (the default), 2, 5 or 10 Hz. This is the rate asked of the GPS;
+most phones deliver at most one fix per second whatever is asked, and fewer when reception is
+poor, so the stream's time stamps, not its sample count, tell when each fix was taken.
 
 | Channel | Unit | |
 |---|---|---|
@@ -208,7 +210,7 @@ old SENDA instead of replacing it.
 ## Use
 
 1. Switch on the phone sensors you want, and set the sensor rate.
-2. Optionally switch on the **Microphone** and pick a sample rate, and the **GPS position**.
+2. Optionally switch on the **Microphone** and the **GPS position**, each with its rate.
 3. For a Polar H10: moisten the electrodes and put the strap on (it only advertises while worn),
    switch on **Polar H10**, tap **Scan** and select the strap. Choose ECG and/or the
    accelerometer (with its rate and range).

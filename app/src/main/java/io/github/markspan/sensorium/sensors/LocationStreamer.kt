@@ -20,8 +20,9 @@ import java.util.Locale
 import kotlin.math.abs
 
 /**
- * Streams the phone's GPS position: one sample per fix, normally once a second, on an LSL stream
- * of irregular rate (`Location <phone model>`, type `Location`). Each fix is stamped with the
+ * Streams the phone's GPS position: one sample per fix, asked for at [rateHz], on an LSL stream
+ * of irregular rate (`Location <phone model>`, type `Location`). The GPS may deliver fixes less
+ * often than asked (most phones manage at most 1 Hz) or skip some. Each fix is stamped with the
  * time it was taken (`Location.getElapsedRealtimeNanos`, converted to the LSL clock), or on
  * arrival in the app with [arrivalStamps].
  */
@@ -31,6 +32,7 @@ class LocationStreamer(
     private val deviceName: String,
     private val sourcePrefix: String,
     private val arrivalStamps: Boolean = false,
+    private val rateHz: Double = LocationFormat.DEFAULT_RATE_HZ,
 ) {
     private val lm = context.getSystemService(LocationManager::class.java)
     private var outlet: LslOutlet? = null
@@ -57,7 +59,9 @@ class LocationStreamer(
         }
         val t = HandlerThread("sensorium-location").also { it.start() }
         thread = t
-        manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, INTERVAL_MS, 0f, listener, t.looper)
+        manager.requestLocationUpdates(
+            LocationManager.GPS_PROVIDER, LocationFormat.intervalMs(rateHz), 0f, listener, t.looper,
+        )
     }
 
     fun stop() {
@@ -114,13 +118,23 @@ class LocationStreamer(
     }
 
     private companion object {
-        const val INTERVAL_MS = 1000L
         const val MAX_FIX_AGE_NS = 10_000_000_000L
     }
 }
 
 /** Channel layout and formatting of the location stream, apart from Android so it can be tested. */
 object LocationFormat {
+    /** Rates offered in the UI, in Hz. */
+    val RATES_HZ = listOf(0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0)
+    const val DEFAULT_RATE_HZ = 1.0
+
+    /** Interval between fixes asked of the GPS, in ms. */
+    fun intervalMs(rateHz: Double): Long = Math.round(1000.0 / rateHz).coerceAtLeast(1)
+
+    /** `0.1`, `0.5`, `1`, `10`: the dropdown label of a rate. */
+    fun rateLabel(rateHz: Double): String =
+        if (rateHz == Math.rint(rateHz)) rateHz.toLong().toString() else String.format(Locale.ROOT, "%.1f", rateHz)
+
     val LABELS = listOf("Latitude", "Longitude", "Altitude", "Accuracy", "Speed", "Bearing")
     val UNITS = listOf("degrees", "degrees", "m", "m", "m/s", "degrees")
 

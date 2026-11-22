@@ -20,6 +20,7 @@ import io.github.markspan.sensorium.MainActivity
 import io.github.markspan.sensorium.R
 import io.github.markspan.sensorium.ble.PolarH10Client
 import io.github.markspan.sensorium.sensors.AudioStreamer
+import io.github.markspan.sensorium.sensors.LocationFormat
 import io.github.markspan.sensorium.sensors.LocationStreamer
 import io.github.markspan.sensorium.sensors.PhoneSensorStreamer
 
@@ -85,7 +86,10 @@ class StreamService : Service() {
             StreamState.message("Microphone: ${e.message}")
         }
         if (withLocation) try {
-            location = LocationStreamer(this, deviceName, sourcePrefix, arrivalStamps).also { it.start() }
+            location = LocationStreamer(
+                this, deviceName, sourcePrefix, arrivalStamps,
+                intent.getDoubleExtra(EXTRA_LOCATION_RATE, LocationFormat.DEFAULT_RATE_HZ),
+            ).also { it.start() }
         } catch (e: Throwable) {
             location?.stop()
             location = null
@@ -253,6 +257,8 @@ class StreamService : Service() {
         const val EXTRA_AUDIO_RATE = "audioRate"
         /** Stream the GPS position; the caller has checked ACCESS_FINE_LOCATION. */
         const val EXTRA_LOCATION = "location"
+        /** GPS rate in Hz (a Double). */
+        const val EXTRA_LOCATION_RATE = "locationRate"
         /** Polar H10 to stream; absent = no Polar streams. */
         const val EXTRA_POLAR_ADDRESS = "polarAddress"
         const val EXTRA_POLAR_NAME = "polarName"

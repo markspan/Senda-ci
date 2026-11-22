@@ -47,6 +47,7 @@ import com.google.android.material.snackbar.Snackbar
 import io.github.markspan.sensorium.ble.PmdCommand
 import io.github.markspan.sensorium.lsl.LslNative
 import io.github.markspan.sensorium.sensors.AudioStreamer
+import io.github.markspan.sensorium.sensors.LocationFormat
 import io.github.markspan.sensorium.sensors.PhoneSensor
 import io.github.markspan.sensorium.sensors.PhoneSensors
 import io.github.markspan.sensorium.sensors.SensorCatalog
@@ -79,6 +80,7 @@ class MainActivity : AppCompatActivity() {
 
     // GPS
     private lateinit var locationSwitch: MaterialSwitch
+    private lateinit var locationRate: AutoCompleteTextView
 
     // Polar
     private val devices = mutableListOf<FoundDevice>()
@@ -124,6 +126,7 @@ class MainActivity : AppCompatActivity() {
         audioSwitch = findViewById(R.id.audioSwitch)
         audioRate = findViewById(R.id.audioRate)
         locationSwitch = findViewById(R.id.locationSwitch)
+        locationRate = findViewById(R.id.locationRate)
         polarSwitch = findViewById(R.id.polarSwitch)
         scanButton = findViewById(R.id.scanButton)
         scanProgress = findViewById(R.id.scanProgress)
@@ -165,7 +168,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.selectNone).setOnClickListener { setAllSensors(false) }
         scanButton.setOnClickListener { if (scanning) stopScan() else ensureReadyAndScan() }
         streamButton.setOnClickListener { toggleStreaming() }
-        listOf(audioSwitch, accSwitch, polarSwitch, arrivalSwitch).forEach {
+        listOf(audioSwitch, locationSwitch, accSwitch, polarSwitch, arrivalSwitch).forEach {
             it.setOnCheckedChangeListener { _, _ -> updateControls(StreamState.state.value) }
         }
 
@@ -246,6 +249,13 @@ class MainActivity : AppCompatActivity() {
         audioSwitch.isChecked = prefs.getBoolean("audio", false)
         setupDropdown(audioRate, AudioStreamer.RATES, prefs.getInt("audioRate", AudioStreamer.DEFAULT_RATE))
         locationSwitch.isChecked = prefs.getBoolean("location", false)
+        locationRate.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_list_item_1, LocationFormat.RATES_HZ.map(LocationFormat::rateLabel)),
+        )
+        val savedRate = prefs.getFloat("locationRate", LocationFormat.DEFAULT_RATE_HZ.toFloat()).toDouble()
+        locationRate.setText(
+            LocationFormat.rateLabel(LocationFormat.RATES_HZ.minBy { Math.abs(it - savedRate) }), false,
+        )
 
         polarSwitch.isChecked = prefs.getBoolean("polar", false)
         arrivalSwitch.isChecked = prefs.getBoolean("arrivalStamps", false)
@@ -267,6 +277,7 @@ class MainActivity : AppCompatActivity() {
         putBoolean("audio", audioSwitch.isChecked)
         putInt("audioRate", dropdownValue(audioRate, AudioStreamer.DEFAULT_RATE))
         putBoolean("location", locationSwitch.isChecked)
+        putFloat("locationRate", locationRateValue().toFloat())
         putBoolean("polar", polarSwitch.isChecked)
         putBoolean("arrivalStamps", arrivalSwitch.isChecked)
         putBoolean("ecg", ecgSwitch.isChecked)
@@ -281,6 +292,10 @@ class MainActivity : AppCompatActivity() {
         view.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, items))
         view.setText(label(if (current in values) current else values.last()), false)
     }
+
+    private fun locationRateValue(): Double =
+        LocationFormat.RATES_HZ.firstOrNull { LocationFormat.rateLabel(it) == locationRate.text.toString() }
+            ?: LocationFormat.DEFAULT_RATE_HZ
 
     private fun label(value: Int) = if (value == 0) getString(R.string.sensor_rate_max) else value.toString()
 
@@ -493,6 +508,7 @@ class MainActivity : AppCompatActivity() {
             .putExtra(StreamService.EXTRA_SENSOR_RATE, dropdownValue(sensorRate, SensorCatalog.DEFAULT_RATE))
             .putExtra(StreamService.EXTRA_AUDIO_RATE, if (audio) dropdownValue(audioRate, AudioStreamer.DEFAULT_RATE) else 0)
             .putExtra(StreamService.EXTRA_LOCATION, location)
+            .putExtra(StreamService.EXTRA_LOCATION_RATE, locationRateValue())
             .putExtra(StreamService.EXTRA_ARRIVAL_STAMPS, arrivalSwitch.isChecked)
         if (device != null) {
             prefs.edit {
@@ -578,6 +594,8 @@ class MainActivity : AppCompatActivity() {
         audioRate.isEnabled = idle && audioSwitch.isChecked
 
         locationSwitch.isEnabled = idle
+        findViewById<View>(R.id.locationRateLayout).isEnabled = idle && locationSwitch.isChecked
+        locationRate.isEnabled = idle && locationSwitch.isChecked
 
         polarSwitch.isEnabled = idle
         findViewById<View>(R.id.polarOptions).visibility = if (polarSwitch.isChecked) View.VISIBLE else View.GONE

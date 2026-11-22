@@ -20,8 +20,9 @@
 
     <!-- GPS -->
     <string name="location">Location</string>
-    <string name="stream_location">GPS position · about 1 Hz</string>
-    <string name="location_hint">Latitude, longitude, altitude, accuracy, speed and bearing, one sample per GPS fix. Works best outdoors; needs precise location permission.</string>
+    <string name="stream_location">GPS position</string>
+    <string name="location_rate">GPS rate (Hz)</string>
+    <string name="location_hint">Latitude, longitude, altitude, accuracy, speed and bearing, one sample per GPS fix. Most phones deliver at most 1 fix per second, whatever the rate. Works best outdoors; needs precise location permission.</string>
     <string name="location_permission_needed">Precise location permission is required for the GPS stream.</string>
 
     <!-- Polar -->
