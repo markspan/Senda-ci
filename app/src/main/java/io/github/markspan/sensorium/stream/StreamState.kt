@@ -37,8 +37,11 @@ data class StreamUiState(
     val messages: List<String> = emptyList(),
 )
 
-/** Live preview of one streaming phone sensor: its recent samples and how many were sent. */
-class SensorPreview(val key: String, val label: String, val buffer: PreviewBuffer) {
+/**
+ * Live preview of one streaming phone sensor: its recent samples, the time in seconds the plot
+ * covers, and how many samples were sent.
+ */
+class SensorPreview(val key: String, val label: String, val buffer: PreviewBuffer, val spanSeconds: Double) {
     val samples = AtomicLong()
 }
 
@@ -58,6 +61,7 @@ object StreamState {
      * into the state once a second.
      */
     val phoneSamples = AtomicLong()
+    val audioSamples = AtomicLong()
 
     /**
      * Previews of the streaming phone sensors, in the order they started. Sensors without a known
@@ -71,7 +75,6 @@ object StreamState {
     fun addSensorPreview(preview: SensorPreview) {
         sensorPreviews = sensorPreviews + preview
     }
-    val audioSamples = AtomicLong()
 
     fun update(transform: (StreamUiState) -> StreamUiState) = _state.update(transform)
 
@@ -89,17 +92,23 @@ object StreamState {
     private const val MAX_MESSAGES = 6
 }
 
-/** Fixed-size ring buffer of multiplexed samples, written by the service and read by the UI. */
-class PreviewBuffer(val channels: Int, val capacity: Int) {
+/**
+ * Fixed-size ring buffer of multiplexed samples, written by the service and read by the UI.
+ * A [timed] buffer also keeps a time per sample, for streams without a regular rate.
+ */
+class PreviewBuffer(val channels: Int, val capacity: Int, val timed: Boolean = false) {
     private val data = FloatArray(channels * capacity)
+    private val times = LongArray(if (timed) capacity else 0)
     private var head = 0
     private var size = 0
 
+    /** Adds whole samples; in a [timed] buffer each gets [timeNs] (`elapsedRealtimeNanos`). */
     @Synchronized
-    fun add(samples: FloatArray) {
+    fun add(samples: FloatArray, timeNs: Long = 0L) {
         var i = 0
         while (i + channels <= samples.size) {
             System.arraycopy(samples, i, data, head * channels, channels)
+            if (timed) times[head] = timeNs
             head = (head + 1) % capacity
             if (size < capacity) size++
             i += channels
@@ -112,12 +121,17 @@ class PreviewBuffer(val channels: Int, val capacity: Int) {
         size = 0
     }
 
-    /** Copies the buffered samples, oldest first, into [out] and returns the sample count. */
+    /**
+     * Copies the buffered samples, oldest first, into [out] (and their times into [outTimes],
+     * for a timed buffer) and returns the sample count.
+     */
     @Synchronized
-    fun snapshot(out: FloatArray): Int {
+    fun snapshot(out: FloatArray, outTimes: LongArray? = null): Int {
         val start = (head - size + capacity) % capacity
         for (s in 0 until size) {
-            System.arraycopy(data, ((start + s) % capacity) * channels, out, s * channels, channels)
+            val p = (start + s) % capacity
+            System.arraycopy(data, p * channels, out, s * channels, channels)
+            if (timed && outTimes != null) outTimes[s] = times[p]
         }
         return size
     }

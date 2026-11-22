@@ -177,7 +177,7 @@ Download `Sensorium-<version>-release.apk` from the
 Copy it to the phone and open it (allow "install unknown apps"), or:
 
 ```bash
-adb install -r Sensorium-1.2.1-release.apk
+adb install -r Sensorium-1.2.2-release.apk
 ```
 
 Requires Android 8.0 (API 26) or newer. Bluetooth LE is only needed for the Polar H10.
@@ -209,9 +209,12 @@ The settings are locked while streaming. The top of the screen shows the phone's
   An open circle `○` turns into a filled `●` with *(consumer connected)* as soon as a
   recorder or viewer has opened that stream, so you can check on the phone that LabRecorder
   really receives it.
-- **Signal**: a live plot of every streaming phone sensor (the last 5 s, or the last 100 events
-  of an on-change sensor such as light or steps), with its sample count and, for one-channel
-  sensors, the latest value; and of the microphone and the H10 ECG and accelerometer.
+- **Signal**: a live plot of every streaming phone sensor, with its sample count and, for
+  one-channel sensors, the latest value; and of the microphone and the H10 ECG and
+  accelerometer. The newest sample is at the right edge. Phone sensor and ECG plots have a time
+  axis, with the span they cover top right and a tick per second (per 5 s for longer spans).
+  Continuous sensors show their last 5 s; on-change sensors (light, proximity, steps, …) show
+  their last 30 s against time, each value held until the next.
 - The network interfaces LSL uses, and the Sensorium and liblsl versions.
 
 Sensorium runs as a foreground service: it keeps streaming with the screen off or with another app

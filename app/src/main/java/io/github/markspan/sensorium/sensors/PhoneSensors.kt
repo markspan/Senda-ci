@@ -178,15 +178,20 @@ object PhoneSensors {
     }
 
     /**
-     * Preview length in samples: about [PREVIEW_SECONDS] at [nominalRate], or the last
-     * [PREVIEW_EVENTS] events of an irregular (on-change) sensor.
+     * Preview length in samples: about [PREVIEW_SECONDS] at [nominalRate], or room for
+     * [PREVIEW_EVENTS] events of an irregular (on-change) sensor, which is plotted against time.
      */
     fun previewCapacity(nominalRate: Double): Int =
         if (nominalRate <= 0) PREVIEW_EVENTS
         else (nominalRate * PREVIEW_SECONDS).roundToInt().coerceIn(50, 1000)
 
+    /** Seconds a preview covers: its capacity at [nominalRate], or [EVENT_WINDOW_SECONDS]. */
+    fun previewSpan(nominalRate: Double): Double =
+        if (nominalRate <= 0) EVENT_WINDOW_SECONDS else previewCapacity(nominalRate) / nominalRate
+
     private const val PREVIEW_SECONDS = 5
-    private const val PREVIEW_EVENTS = 100
+    private const val PREVIEW_EVENTS = 500
+    private const val EVENT_WINDOW_SECONDS = 30.0
 
     fun keyOf(s: Sensor) = "${s.type}|${s.name}|${if (s.isWakeUpSensor) "w" else ""}"
 
@@ -316,7 +321,8 @@ class PhoneSensorStreamer(
         val ps = sensors.firstOrNull { it.sensor == sensor } ?: return
         val preview = SensorPreview(
             ps.key, PhoneSensors.previewLabel(ps.title, spec),
-            PreviewBuffer(spec.channelCount, PhoneSensors.previewCapacity(nominalRate)),
+            PreviewBuffer(spec.channelCount, PhoneSensors.previewCapacity(nominalRate), timed = nominalRate <= 0),
+            PhoneSensors.previewSpan(nominalRate),
         )
         previews[sensor] = preview
         StreamState.addSensorPreview(preview)
@@ -336,7 +342,7 @@ class PhoneSensorStreamer(
         if (arrivalStamps) outlet.push(sample) else outlet.push(sample, toLslTime(event.timestamp))
 
         previews[sensor]?.let {
-            it.buffer.add(sample)
+            it.buffer.add(sample, SystemClock.elapsedRealtimeNanos())
             it.samples.incrementAndGet()
         }
         StreamState.phoneSamples.incrementAndGet()

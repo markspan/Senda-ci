@@ -166,7 +166,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<SignalView>(R.id.audioView).bind(StreamState.audioPreview, "Microphone")
-        findViewById<SignalView>(R.id.ecgView).bind(StreamState.ecgPreview, "H10 ECG (µV)")
+        findViewById<SignalView>(R.id.ecgView).bind(StreamState.ecgPreview, "H10 ECG (µV)", spanSeconds = 5.0)
         findViewById<SignalView>(R.id.polarAccView).bind(StreamState.polarAccPreview, "H10 ACC X / Y / Z (mG)")
         findViewById<TextView>(R.id.versionText).text = LslNative.versionString()
             ?.let { "Sensorium ${BuildConfig.VERSION_NAME} · liblsl $it" }
@@ -542,7 +542,7 @@ class MainActivity : AppCompatActivity() {
         val density = resources.displayMetrics.density
         previews.forEach { p ->
             container.addView(
-                SignalView(this).apply { bind(p.buffer, p.label, p.samples) },
+                SignalView(this).apply { bind(p.buffer, p.label, p.samples, p.spanSeconds) },
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (90 * density).toInt()).apply {
                     topMargin = (8 * density).toInt()
                 },
