@@ -47,19 +47,25 @@ reports it (see [Time stamps](#time-stamps)).
 
 ### Polar H10
 
-The same streams as PolarMobile and the [PolarBLE](https://github.com/markspan/PolarBLE) desktop
-app (middle screenshot above):
+The ECG and accelerometer streams of PolarMobile and the
+[PolarBLE](https://github.com/markspan/PolarBLE) desktop app, with the same names (middle
+screenshot above):
 
 | Stream | Name | Type | Rate | Unit |
 |---|---|---|---|---|
 | ECG | `<name>_ecg` | `ECG` | 130 Hz | µV |
 | Accelerometer X/Y/Z | `<name>_acc` | `Accelerometer` | 25, 50, 100 or 200 Hz; range ±2, 4 or 8 g | mG |
-| Heart rate (optional) | `<name>_hr` | `HeartRate` | irregular | bpm |
-| RR intervals (optional) | `<name>_rr` | `RR` | irregular | ms |
 
 `<name>` is the name the strap advertises, e.g. `Polar H10 A1B2C3D4`. When the Bluetooth
 connection drops, Sensorium reconnects by itself; the LSL outlets stay up meanwhile, so the
-recording continues.
+recording continues. Bluetooth packets lost while connected are filled in with NaN (see
+[Lost Bluetooth packets](#lost-bluetooth-packets-polar-h10)).
+
+Heart rate and RR intervals are not streamed (Sensorium 1.1 and earlier had optional `<name>_hr`
+and `<name>_rr` streams). Derive them from the ECG instead, with an R-peak detector such as
+those in NeuroKit2, HeartPy or the ECG tools of MNE: that gives every beat with the ECG's 130 Hz
+resolution and on the ECG's own time stamps, rather than the strap's on-board estimate stamped
+on arrival.
 
 ## Time stamps
 
@@ -76,7 +82,7 @@ Sensorium:
 |---|---|---|
 | Phone sensors | The sensor's hardware time stamp, converted to the LSL clock | Nothing, apart from the sensor's own filtering delay |
 | Microphone | The capture time the phone reports (`AudioRecord.getTimestamp`) for the last sample of each 20 ms block; earlier samples are spaced by the sample rate | Nothing, apart from analog/ADC delay. Without a reported capture time the block is stamped on arrival instead |
-| Polar H10 | Arrival time on the phone of each Bluetooth packet, for its last sample; earlier samples are spaced by the sample rate | The H10's buffering and the Bluetooth transfer: a delay of some tens of ms that varies from packet to packet |
+| Polar H10 | Arrival time on the phone of each Bluetooth packet, for its last sample; earlier samples are spaced by the sample rate. Samples of lost packets are filled with NaN (see below) | The H10's buffering and the Bluetooth transfer: a delay of some tens of ms that varies from packet to packet |
 
 The H10 has its own clock, which LSL cannot synchronise with directly. The arrival times are
 therefore passed on unsmoothed, as LSL recommends. The packet-to-packet jitter is removed when
@@ -84,6 +90,35 @@ loading the XDF file with dejittering on (the default in pyxdf, `dejitter_timest
 fits a straight line through the time stamps of each regular stream. The average Bluetooth delay
 stays in the data; for analyses that need the H10 aligned to the millisecond, record a shared sync
 event (for example a tap on the strap that also shows in the phone accelerometer).
+
+### Lost Bluetooth packets (Polar H10)
+
+The H10 sends its ECG and accelerometer in Bluetooth packets of some tens of samples (about
+73 ECG samples, or 0.56 s). Now and then a packet does not arrive, for instance when the phone is
+busy or the strap is far away or behind the body. Because every sample after the loss is stamped
+back from the next packet's arrival time, the stream would then contain fewer samples than the
+time it covers: sample numbers would no longer match time, and dejittering would spread the
+missing half second over the surrounding samples.
+
+Each packet also carries the H10's own clock time of its last sample. Sensorium compares that
+with the previous packet: when more time has passed than the packet's samples cover, the
+difference (rounded to whole samples) was lost, and Sensorium inserts that many samples of
+**NaN** in front of the packet. The strap's actual sample rate can be slightly off the nominal
+130 or 200 Hz, so Sensorium measures it on the H10's clock from packets that arrive back to back,
+and counts the missing samples with that rate. The NaN samples are stamped like the others (back from the
+packet's arrival at the nominal rate), so the stream keeps one sample per sample period and its
+time stamps stay continuous. The H10 clock is used only to count the missing samples; the time
+stamps are still the arrival times, passed on unsmoothed as described above.
+
+- In the data, a lost packet shows as a run of NaN in every channel. Interpolate or mask it
+  before filtering or R-peak detection; most filters spread a single NaN over the whole signal.
+- The Status card counts the losses per stream, e.g. `ECG 52340 (146 lost in 2 gaps)`, and the
+  live preview shows a break in the trace.
+- A reconnect is not filled in: the time between disconnect and reconnect stays a gap in the
+  time stamps, as before. A jump of the H10 clock of more than 10 s, or backwards, is not filled
+  either and is reported in the Status card.
+- Which recordings have this is in the stream meta-data: `<desc><acquisition><timestamps>` ends
+  in `samples of lost packets are NaN`.
 
 ### Stamp on arrival (as SENDA)
 
@@ -130,7 +165,7 @@ Download `Sensorium-<version>-release.apk` from the
 Copy it to the phone and open it (allow "install unknown apps"), or:
 
 ```bash
-adb install -r Sensorium-1.1.0-release.apk
+adb install -r Sensorium-1.2.0-release.apk
 ```
 
 Requires Android 8.0 (API 26) or newer. Bluetooth LE is only needed for the Polar H10.
@@ -143,8 +178,8 @@ old SENDA instead of replacing it.
 1. Switch on the phone sensors you want, and set the sensor rate.
 2. Optionally switch on the **Microphone** and pick a sample rate.
 3. For a Polar H10: moisten the electrodes and put the strap on (it only advertises while worn),
-   switch on **Polar H10**, tap **Scan** and select the strap. Choose ECG, accelerometer
-   (with its rate and range) and, if you want them, heart rate and RR intervals.
+   switch on **Polar H10**, tap **Scan** and select the strap. Choose ECG and/or the
+   accelerometer (with its rate and range).
 4. Tap **Start streaming** and grant the permissions asked for.
 5. On the recording computer, on the same Wi-Fi or LAN, open LabRecorder and press *Update*:
    the streams appear.

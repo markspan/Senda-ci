@@ -40,14 +40,14 @@ object LslNative {
     }.getOrNull()
 }
 
-/** Use for streams without a fixed sampling rate (heart rate, RR intervals, on-change sensors). */
+/** Use for streams without a fixed sampling rate (on-change sensors). */
 const val IRREGULAR_RATE = 0.0
 
 // Values of <acquisition><timestamps> in the stream meta-data.
 const val TIMESTAMPS_SENSOR = "sensor hardware time stamp, converted to lsl_local_clock"
 const val TIMESTAMPS_CAPTURE = "audio capture time (AudioRecord.getTimestamp), converted to lsl_local_clock"
 const val TIMESTAMPS_ARRIVAL = "lsl_local_clock on arrival in the app"
-const val TIMESTAMPS_BLE_ARRIVAL = "lsl_local_clock on arrival of each Bluetooth packet (last sample), earlier samples at the nominal rate"
+const val TIMESTAMPS_BLE_ARRIVAL = "lsl_local_clock on arrival of each Bluetooth packet (last sample), earlier samples at the nominal rate; samples of lost packets are NaN"
 
 /** A float32 LSL stream outlet. */
 class LslOutlet(

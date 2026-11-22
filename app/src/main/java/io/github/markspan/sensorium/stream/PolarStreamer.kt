@@ -5,19 +5,21 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import io.github.markspan.sensorium.ble.HeartRateMeasurement
+import android.util.Log
 import io.github.markspan.sensorium.ble.PmdCommand
 import io.github.markspan.sensorium.ble.PmdFrame
+import io.github.markspan.sensorium.ble.PmdGapFiller
 import io.github.markspan.sensorium.ble.PolarH10Client
-import io.github.markspan.sensorium.lsl.IRREGULAR_RATE
 import io.github.markspan.sensorium.lsl.LslOutlet
-import io.github.markspan.sensorium.lsl.TIMESTAMPS_ARRIVAL
 import io.github.markspan.sensorium.lsl.TIMESTAMPS_BLE_ARRIVAL
 
 /**
- * Relays one Polar H10 to LSL, with the same stream names and source ids as the PolarBLE desktop
- * app and PolarMobile. The outlets survive BLE reconnects: consumers such as LabRecorder simply
- * see a gap instead of a vanished stream.
+ * Relays the ECG and accelerometer of one Polar H10 to LSL, with the same stream names and source
+ * ids as the PolarBLE desktop app and PolarMobile. The outlets survive BLE reconnects: consumers
+ * such as LabRecorder simply see a gap instead of a vanished stream.
+ *
+ * Bluetooth packets lost within a connection are detected from the H10's own time stamps and
+ * replaced by NaN samples (see [PmdGapFiller]), so that sample numbers keep matching time.
  */
 class PolarStreamer(
     private val context: Context,
@@ -32,8 +34,9 @@ class PolarStreamer(
 
     private var ecgOutlet: LslOutlet? = null
     private var accOutlet: LslOutlet? = null
-    private var hrOutlet: LslOutlet? = null
-    private var rrOutlet: LslOutlet? = null
+
+    private val ecgGaps = PmdGapFiller(PmdCommand.ECG_SAMPLE_RATE, channels = 1)
+    private val accGaps = PmdGapFiller(config.accRate, channels = 3)
 
     fun start() {
         active = true
@@ -54,17 +57,9 @@ class PolarStreamer(
             "${n}_acc", "Accelerometer", 3, config.accRate.toDouble(), "${n}_acc",
             listOf("X", "Y", "Z"), listOf("mG"), "ACC", "Polar", "H10", timestamps = TIMESTAMPS_BLE_ARRIVAL,
         )
-        if (config.heartRate) {
-            hrOutlet = LslOutlet(
-                "${n}_hr", "HeartRate", 1, IRREGULAR_RATE, "${n}_hr", listOf("HR"), listOf("bpm"), "HR", "Polar", "H10", timestamps = TIMESTAMPS_ARRIVAL,
-            )
-            rrOutlet = LslOutlet(
-                "${n}_rr", "RR", 1, IRREGULAR_RATE, "${n}_rr", listOf("RR"), listOf("ms"), "RR", "Polar", "H10", timestamps = TIMESTAMPS_ARRIVAL,
-            )
-        }
     }
 
-    fun outletInfos(): List<OutletInfo> = listOfNotNull(ecgOutlet, accOutlet, hrOutlet, rrOutlet)
+    fun outletInfos(): List<OutletInfo> = listOfNotNull(ecgOutlet, accOutlet)
         .map { OutletInfo(it.name, it.type, it.hasConsumers) }
 
     @SuppressLint("MissingPermission")
@@ -75,12 +70,25 @@ class PolarStreamer(
             StreamState.message("Bluetooth is off: Polar H10 not connected")
             return
         }
+        // A new connection starts new measurements: the time since the last frame is a
+        // reconnect gap, not lost packets.
+        ecgGaps.reset()
+        accGaps.reset()
         client = PolarH10Client(context, adapter.getRemoteDevice(address), config, listener).also { it.connect() }
     }
 
     private fun setStatus(text: String) {
         StreamState.update { it.copy(polarStatus = text) }
         onStatus(text)
+    }
+
+    private fun checkGap(label: String, result: PmdGapFiller.Result) {
+        if (result.lost > 0) {
+            Log.w(TAG, "$label: ${result.lost} samples lost in Bluetooth transfer, filled with NaN")
+        }
+        if (result.discontinuity) {
+            StreamState.message("$label: H10 clock jumped; samples not filled")
+        }
     }
 
     private val listener = object : PolarH10Client.Listener {
@@ -91,22 +99,30 @@ class PolarStreamer(
         override fun onPmdFrame(frame: PmdFrame) {
             when (frame.measurementType) {
                 PmdCommand.MEASUREMENT_ECG -> {
-                    ecgOutlet?.push(frame.samples)
-                    StreamState.ecgPreview.add(frame.samples)
-                    StreamState.update { it.copy(ecgSamples = it.ecgSamples + frame.sampleCount) }
+                    val r = ecgGaps.fill(frame)
+                    ecgOutlet?.push(r.samples)
+                    StreamState.ecgPreview.add(r.samples)
+                    checkGap("ECG", r)
+                    StreamState.update {
+                        it.copy(
+                            ecgSamples = it.ecgSamples + frame.sampleCount,
+                            ecgLoss = it.ecgLoss.add(r.lost),
+                        )
+                    }
                 }
                 PmdCommand.MEASUREMENT_ACC -> {
-                    accOutlet?.push(frame.samples)
-                    StreamState.polarAccPreview.add(frame.samples)
-                    StreamState.update { it.copy(accSamples = it.accSamples + frame.sampleCount) }
+                    val r = accGaps.fill(frame)
+                    accOutlet?.push(r.samples)
+                    StreamState.polarAccPreview.add(r.samples)
+                    checkGap("ACC", r)
+                    StreamState.update {
+                        it.copy(
+                            accSamples = it.accSamples + frame.sampleCount,
+                            accLoss = it.accLoss.add(r.lost),
+                        )
+                    }
                 }
             }
-        }
-
-        override fun onHeartRate(measurement: HeartRateMeasurement) {
-            hrOutlet?.push(floatArrayOf(measurement.bpm.toFloat()))
-            if (measurement.rrMs.isNotEmpty()) rrOutlet?.push(measurement.rrMs.toFloatArray())
-            StreamState.update { it.copy(heartRate = measurement.bpm) }
         }
 
         override fun onBattery(percent: Int) = StreamState.update { it.copy(battery = percent) }
@@ -130,8 +146,12 @@ class PolarStreamer(
         main.removeCallbacksAndMessages(null)
         client?.close()
         client = null
-        listOfNotNull(ecgOutlet, accOutlet, hrOutlet, rrOutlet).forEach { it.close() }
-        ecgOutlet = null; accOutlet = null; hrOutlet = null; rrOutlet = null
+        listOfNotNull(ecgOutlet, accOutlet).forEach { it.close() }
+        ecgOutlet = null; accOutlet = null
         StreamState.update { it.copy(polarStreaming = false, polarStatus = null) }
+    }
+
+    private companion object {
+        const val TAG = "PolarStreamer"
     }
 }

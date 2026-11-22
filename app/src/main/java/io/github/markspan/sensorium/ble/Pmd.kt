@@ -8,9 +8,6 @@ object PolarUuids {
     val PMD_CONTROL: UUID = UUID.fromString("FB005C81-02E7-F387-1CAD-8ACD2D8DF0C8")
     val PMD_DATA: UUID = UUID.fromString("FB005C82-02E7-F387-1CAD-8ACD2D8DF0C8")
 
-    val HR_SERVICE: UUID = UUID.fromString("0000180D-0000-1000-8000-00805F9B34FB")
-    val HR_MEASUREMENT: UUID = UUID.fromString("00002A37-0000-1000-8000-00805F9B34FB")
-
     val BATTERY_SERVICE: UUID = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB")
     val BATTERY_LEVEL: UUID = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB")
 
@@ -139,33 +136,6 @@ object PmdParser {
         var v = 0L
         for (b in 0 until 8) v = v or ((data[offset + b].toLong() and 0xFF) shl (8 * b))
         return v
-    }
-}
-
-/** Standard Bluetooth Heart Rate Measurement (0x2A37). RR intervals are in milliseconds. */
-data class HeartRateMeasurement(val bpm: Int, val rrMs: List<Float>) {
-    companion object {
-        fun parse(data: ByteArray): HeartRateMeasurement? {
-            if (data.size < 2) return null
-            val flags = data[0].u8
-            var p = 1
-            val bpm = if (flags and 0x01 != 0) {
-                if (data.size < 3) return null
-                (data[1].u8 or (data[2].u8 shl 8)).also { p = 3 }
-            } else {
-                data[1].u8.also { p = 2 }
-            }
-            if (flags and 0x08 != 0) p += 2 // energy expended
-            val rr = mutableListOf<Float>()
-            if (flags and 0x10 != 0) {
-                while (p + 1 < data.size) {
-                    val v = data[p].u8 or (data[p + 1].u8 shl 8)
-                    rr += v * 1000f / 1024f
-                    p += 2
-                }
-            }
-            return HeartRateMeasurement(bpm, rr)
-        }
     }
 }
 

@@ -51,6 +51,7 @@ import io.github.markspan.sensorium.sensors.PhoneSensor
 import io.github.markspan.sensorium.sensors.PhoneSensors
 import io.github.markspan.sensorium.sensors.SensorCatalog
 import io.github.markspan.sensorium.stream.LanAddresses
+import io.github.markspan.sensorium.stream.PacketLoss
 import io.github.markspan.sensorium.stream.StreamService
 import io.github.markspan.sensorium.stream.StreamState
 import io.github.markspan.sensorium.stream.StreamUiState
@@ -86,7 +87,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviceAdapter: DeviceAdapter
     private lateinit var ecgSwitch: MaterialSwitch
     private lateinit var accSwitch: MaterialSwitch
-    private lateinit var hrSwitch: MaterialSwitch
     private lateinit var accRate: AutoCompleteTextView
     private lateinit var accRange: AutoCompleteTextView
 
@@ -124,7 +124,6 @@ class MainActivity : AppCompatActivity() {
         noDevices = findViewById(R.id.noDevices)
         ecgSwitch = findViewById(R.id.ecgSwitch)
         accSwitch = findViewById(R.id.accSwitch)
-        hrSwitch = findViewById(R.id.hrSwitch)
         accRate = findViewById(R.id.accRate)
         accRange = findViewById(R.id.accRange)
         arrivalSwitch = findViewById(R.id.arrivalSwitch)
@@ -231,7 +230,6 @@ class MainActivity : AppCompatActivity() {
         arrivalSwitch.isChecked = prefs.getBoolean("arrivalStamps", false)
         ecgSwitch.isChecked = prefs.getBoolean("ecg", true)
         accSwitch.isChecked = prefs.getBoolean("acc", true)
-        hrSwitch.isChecked = prefs.getBoolean("hr", false)
         setupDropdown(accRate, PmdCommand.ACC_SAMPLE_RATES, prefs.getInt("accRate", 200))
         setupDropdown(accRange, PmdCommand.ACC_RANGES_G, prefs.getInt("accRange", 8))
         val lastAddress = prefs.getString("lastAddress", null)
@@ -251,7 +249,6 @@ class MainActivity : AppCompatActivity() {
         putBoolean("arrivalStamps", arrivalSwitch.isChecked)
         putBoolean("ecg", ecgSwitch.isChecked)
         putBoolean("acc", accSwitch.isChecked)
-        putBoolean("hr", hrSwitch.isChecked)
         putInt("accRate", dropdownValue(accRate, 200))
         putInt("accRange", dropdownValue(accRange, 8))
     }
@@ -473,7 +470,6 @@ class MainActivity : AppCompatActivity() {
                 .putExtra(StreamService.EXTRA_ACC, accSwitch.isChecked)
                 .putExtra(StreamService.EXTRA_ACC_RATE, dropdownValue(accRate, 200))
                 .putExtra(StreamService.EXTRA_ACC_RANGE, dropdownValue(accRange, 8))
-                .putExtra(StreamService.EXTRA_HR, hrSwitch.isChecked)
         }
         ContextCompat.startForegroundService(this, intent)
     }
@@ -496,9 +492,8 @@ class MainActivity : AppCompatActivity() {
                     listOfNotNull(
                         "${s.polarDevice}: ${s.polarStatus ?: "…"}",
                         s.battery?.let { "battery $it%" },
-                        s.heartRate?.let { "HR $it bpm" },
-                        s.ecgSamples.takeIf { it > 0 }?.let { "ECG $it" },
-                        s.accSamples.takeIf { it > 0 }?.let { "ACC $it" },
+                        s.ecgSamples.takeIf { it > 0 }?.let { "ECG $it" + lossText(s.ecgLoss) },
+                        s.accSamples.takeIf { it > 0 }?.let { "ACC $it" + lossText(s.accLoss) },
                     ).joinToString(" · ")
                 )
             }
@@ -531,7 +526,7 @@ class MainActivity : AppCompatActivity() {
 
         polarSwitch.isEnabled = idle
         findViewById<View>(R.id.polarOptions).visibility = if (polarSwitch.isChecked) View.VISIBLE else View.GONE
-        listOf(ecgSwitch, accSwitch, hrSwitch).forEach { it.isEnabled = idle }
+        listOf(ecgSwitch, accSwitch).forEach { it.isEnabled = idle }
         findViewById<View>(R.id.accRateLayout).isEnabled = idle && accSwitch.isChecked
         findViewById<View>(R.id.accRangeLayout).isEnabled = idle && accSwitch.isChecked
         accRate.isEnabled = idle && accSwitch.isChecked
@@ -595,3 +590,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+/** " (73 lost in 1 gap)" after a sample count, or nothing when no Bluetooth packets were lost. */
+private fun lossText(loss: PacketLoss) = if (loss.gaps == 0) "" else " ($loss)"

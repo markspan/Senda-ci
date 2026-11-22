@@ -1,6 +1,5 @@
 package io.github.markspan.sensorium
 
-import io.github.markspan.sensorium.ble.HeartRateMeasurement
 import io.github.markspan.sensorium.ble.PmdCommand
 import io.github.markspan.sensorium.ble.PmdControlResponse
 import io.github.markspan.sensorium.ble.PmdParser
@@ -66,13 +65,4 @@ class PmdParserTest {
         assertEquals(2, r.opCode)
         assertEquals("invalid MTU", r.statusText)
     }
-
-    @Test
-    fun parsesHeartRateWithRr() {
-        // flags: uint8 HR + RR present; HR 60; RR 1024 (=1000 ms), 512 (=500 ms)
-        val hr = HeartRateMeasurement.parse(byteArrayOf(0x10, 60, 0x00, 0x04, 0x00, 0x02))!!
-        assertEquals(60, hr.bpm)
-        assertEquals(listOf(1000f, 500f), hr.rrMs)
-    }
-
 }

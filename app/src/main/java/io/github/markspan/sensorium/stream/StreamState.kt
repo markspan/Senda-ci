@@ -8,6 +8,14 @@ import java.util.concurrent.atomic.AtomicLong
 
 data class OutletInfo(val name: String, val type: String, val hasConsumers: Boolean = false)
 
+/** Samples lost in Bluetooth transfer (and filled with NaN), and in how many separate gaps. */
+data class PacketLoss(val samples: Long = 0, val gaps: Int = 0) {
+    fun add(lost: Int) = if (lost > 0) PacketLoss(samples + lost, gaps + 1) else this
+
+    override fun toString() =
+        if (gaps == 0) "" else "$samples lost in $gaps ${if (gaps == 1) "gap" else "gaps"}"
+}
+
 data class StreamUiState(
     val running: Boolean = false,
     val status: String = "Idle",
@@ -21,9 +29,10 @@ data class StreamUiState(
     val polarStatus: String? = null,
     val polarStreaming: Boolean = false,
     val battery: Int? = null,
-    val heartRate: Int? = null,
     val ecgSamples: Long = 0,
     val accSamples: Long = 0,
+    val ecgLoss: PacketLoss = PacketLoss(),
+    val accLoss: PacketLoss = PacketLoss(),
     val outlets: List<OutletInfo> = emptyList(),
     val messages: List<String> = emptyList(),
 )

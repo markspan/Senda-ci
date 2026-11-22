@@ -22,7 +22,7 @@ import java.util.UUID
  * to [Listener] are made on the client's own handler thread.
  *
  * Sequence after connecting: discover services, raise the MTU (PMD frames need ~232 bytes),
- * read the battery, enable PMD control indications and PMD data / heart-rate notifications, then
+ * read the battery, enable PMD control indications and PMD data notifications, then
  * send one PMD start command per measurement, waiting for each command's response.
  */
 @SuppressLint("MissingPermission") // callers ensure BLUETOOTH_CONNECT is granted
@@ -37,14 +37,12 @@ class PolarH10Client(
         val acc: Boolean = true,
         val accRate: Int = 200,
         val accRangeG: Int = 8,
-        val heartRate: Boolean = false,
     )
 
     interface Listener {
         fun onStatus(text: String)
         fun onStreaming()
         fun onPmdFrame(frame: PmdFrame)
-        fun onHeartRate(measurement: HeartRateMeasurement)
         fun onBattery(percent: Int)
         fun onWarning(text: String)
         fun onDisconnected(reason: String)
@@ -181,9 +179,6 @@ class PolarH10Client(
             enqueue(Op.Subscribe(PolarUuids.PMD_SERVICE, PolarUuids.PMD_CONTROL, indicate = true))
             enqueue(Op.Subscribe(PolarUuids.PMD_SERVICE, PolarUuids.PMD_DATA, indicate = false))
         }
-        if (config.heartRate) {
-            enqueue(Op.Subscribe(PolarUuids.HR_SERVICE, PolarUuids.HR_MEASUREMENT, indicate = false))
-        }
         if (config.ecg) enqueue(Op.PmdCommand("start ECG", PmdCommand.START_ECG))
         if (config.acc) {
             enqueue(Op.PmdCommand("start ACC", PmdCommand.startAcc(config.accRate, config.accRangeG)))
@@ -194,7 +189,6 @@ class PolarH10Client(
     private fun onValue(uuid: UUID, value: ByteArray) {
         when (uuid) {
             PolarUuids.PMD_DATA -> PmdParser.parse(value)?.let(listener::onPmdFrame)
-            PolarUuids.HR_MEASUREMENT -> HeartRateMeasurement.parse(value)?.let(listener::onHeartRate)
             PolarUuids.PMD_CONTROL -> {
                 val response = PmdControlResponse.parse(value) ?: return
                 val op = current

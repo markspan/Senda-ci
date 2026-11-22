@@ -89,7 +89,6 @@ class StreamService : Service() {
                     acc = intent.getBooleanExtra(EXTRA_ACC, true),
                     accRate = intent.getIntExtra(EXTRA_ACC_RATE, 200),
                     accRangeG = intent.getIntExtra(EXTRA_ACC_RANGE, 8),
-                    heartRate = intent.getBooleanExtra(EXTRA_HR, false),
                 ),
                 onStatus = { updateNotification() },
             ).also { it.start() }
@@ -243,7 +242,6 @@ class StreamService : Service() {
         const val EXTRA_ACC = "acc"
         const val EXTRA_ACC_RATE = "accRate"
         const val EXTRA_ACC_RANGE = "accRange"
-        const val EXTRA_HR = "hr"
         /** Stamp phone sensors and audio on arrival in the app, as SENDA does. */
         const val EXTRA_ARRIVAL_STAMPS = "arrivalStamps"
 

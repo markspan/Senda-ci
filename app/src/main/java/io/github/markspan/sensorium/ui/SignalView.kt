@@ -51,18 +51,25 @@ class SignalView @JvmOverloads constructor(
             var min = Float.MAX_VALUE
             var max = -Float.MAX_VALUE
             for (i in 0 until n * ch) {
-                min = minOf(min, scratch[i]); max = maxOf(max, scratch[i])
+                val v = scratch[i]
+                if (v.isNaN()) continue // lost samples
+                min = minOf(min, v); max = maxOf(max, v)
             }
+            if (min > max) { min = 0f; max = 0f } // nothing but NaN
             val range = (max - min).takeIf { it > 0f } ?: 1f
             val top = labelPaint.textSize * 1.4f
             val h = height - top - paddingBottom
             val dx = width.toFloat() / (buf.capacity - 1)
             for (c in 0 until ch) {
                 path.reset()
+                var penUp = true
                 for (s in 0 until n) {
+                    val v = scratch[s * ch + c]
+                    if (v.isNaN()) { penUp = true; continue } // gap where samples were lost
                     val x = s * dx
-                    val y = top + h * (1f - (scratch[s * ch + c] - min) / range)
-                    if (s == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    val y = top + h * (1f - (v - min) / range)
+                    if (penUp) path.moveTo(x, y) else path.lineTo(x, y)
+                    penUp = false
                 }
                 paint.color = traceColors[c % traceColors.size]
                 canvas.drawPath(path, paint)

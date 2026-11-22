@@ -29,7 +29,6 @@
     <string name="no_devices">Tap Scan and wear the H10 (wet the electrodes) so it starts advertising.</string>
     <string name="stream_ecg">ECG · 130 Hz · µV</string>
     <string name="stream_acc">Accelerometer · 3 axes · mG</string>
-    <string name="stream_hr">Heart rate &amp; RR intervals</string>
     <string name="acc_rate">ACC rate (Hz)</string>
     <string name="acc_range">ACC range (g)</string>
     <string name="select_device">Select a Polar device first, or switch the Polar H10 off</string>
@@ -57,7 +56,7 @@
 
     <!-- About -->
     <string name="about">About</string>
-    <string name="about_description">Streams the sensors of this phone, its microphone and a Polar H10 chest strap (ECG, accelerometer, heart rate, RR intervals) to Lab Streaming Layer.</string>
+    <string name="about_description">Streams the sensors of this phone, its microphone and a Polar H10 chest strap (ECG and accelerometer) to Lab Streaming Layer.</string>
     <string name="about_history">Sensorium grew out of SENDA by Ali Ayub Khan (NeuropsyOL, University of Oldenburg), rewritten with the Polar H10 support of PolarMobile.</string>
     <string name="about_author_name">Mark M. Span</string>
     <string name="about_author_roles">Scientific Advisor, Research Support, Faculty of Behavioural and Social Sciences\nLecturer, Experimental Psychology\nUniversity of Groningen, the Netherlands</string>
