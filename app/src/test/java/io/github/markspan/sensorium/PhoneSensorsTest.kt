@@ -92,14 +92,14 @@ class PhoneSensorsTest {
         assertEquals(250, PhoneSensors.previewCapacity(50.0))
         assertEquals(1000, PhoneSensors.previewCapacity(400.0)) // capped
         assertEquals(50, PhoneSensors.previewCapacity(1.0)) // at least 50 points
-        assertEquals(500, PhoneSensors.previewCapacity(0.0)) // on change: room for 500 events
+        assertEquals(3000, PhoneSensors.previewCapacity(0.0)) // on change: room for 3000 events
     }
 
     @Test
     fun previewSpans() {
         assertEquals(5.0, PhoneSensors.previewSpan(50.0), 1e-9)
         assertEquals(2.5, PhoneSensors.previewSpan(400.0), 1e-9) // 1000 points at 400 Hz
-        assertEquals(30.0, PhoneSensors.previewSpan(0.0), 1e-9) // on change: last 30 s
+        assertEquals(300.0, PhoneSensors.previewSpan(0.0), 1e-9) // on change: last 5 minutes
     }
 
     @Test

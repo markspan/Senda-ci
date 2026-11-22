@@ -212,9 +212,9 @@ The settings are locked while streaming. The top of the screen shows the phone's
 - **Signal**: a live plot of every streaming phone sensor, with its sample count and, for
   one-channel sensors, the latest value; and of the microphone and the H10 ECG and
   accelerometer. The newest sample is at the right edge. Phone sensor and ECG plots have a time
-  axis, with the span they cover top right and a tick per second (per 5 s for longer spans).
-  Continuous sensors show their last 5 s; on-change sensors (light, proximity, steps, …) show
-  their last 30 s against time, each value held until the next.
+  axis, with the span they cover top right and a tick per second (per minute for the on-change
+  sensors). Continuous sensors show their last 5 s; on-change sensors (light, proximity,
+  steps, …) show their last 5 minutes against time, each value held until the next.
 - The network interfaces LSL uses, and the Sensorium and liblsl versions.
 
 Sensorium runs as a foreground service: it keeps streaming with the screen off or with another app

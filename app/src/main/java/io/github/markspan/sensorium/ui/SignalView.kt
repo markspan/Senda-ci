@@ -54,7 +54,7 @@ class SignalView @JvmOverloads constructor(
     /**
      * Plots [buffer] under [label]. With [count], the label also shows that sample count and,
      * for a single channel, the latest value. With [spanSeconds], the time the plot covers, a
-     * time axis is drawn: ticks every second (every 5 or 10 s for longer spans) back from the
+     * time axis is drawn: ticks every second (up to every minute for longer spans) back from the
      * present at the right edge. A timed buffer needs [spanSeconds].
      */
     fun bind(buffer: PreviewBuffer, label: String, count: AtomicLong? = null, spanSeconds: Double? = null) {
@@ -177,15 +177,18 @@ class SignalView @JvmOverloads constructor(
 
 /** Time-axis layout of [SignalView], kept apart from the view so it can be unit tested. */
 object TimeAxis {
-    /** Seconds between ticks: 1 s up to a 10 s span, then 5 s up to a minute, then 10 s. */
+    /** Seconds between ticks: 1 s up to a 10 s span, 5 s up to a minute, 10 s up to 2 min, then 1 min. */
     fun tickStep(spanSeconds: Double) = when {
         spanSeconds <= 10 -> 1.0
         spanSeconds <= 60 -> 5.0
-        else -> 10.0
+        spanSeconds <= 120 -> 10.0
+        else -> 60.0
     }
 
-    /** `5 s`, `2.5 s` (in the phone's number format), `30 s`. */
-    fun formatSpan(spanSeconds: Double): String =
-        if (spanSeconds >= 10 || spanSeconds == Math.rint(spanSeconds)) "${Math.round(spanSeconds)} s"
-        else "${"%.1f".format(spanSeconds)} s"
+    /** `5 s`, `2.5 s` (in the phone's number format), `40 s`, `5 min`. */
+    fun formatSpan(spanSeconds: Double): String = when {
+        spanSeconds >= 60 && spanSeconds % 60 == 0.0 -> "${(spanSeconds / 60).toLong()} min"
+        spanSeconds >= 10 || spanSeconds == Math.rint(spanSeconds) -> "${Math.round(spanSeconds)} s"
+        else -> "${"%.1f".format(spanSeconds)} s"
+    }
 }

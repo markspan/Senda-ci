@@ -37,8 +37,11 @@ class PreviewTest {
         assertEquals(1.0, TimeAxis.tickStep(5.0), 0.0)
         assertEquals(5.0, TimeAxis.tickStep(30.0), 0.0)
         assertEquals(10.0, TimeAxis.tickStep(120.0), 0.0)
+        assertEquals(60.0, TimeAxis.tickStep(300.0), 0.0)
         assertEquals("5 s", TimeAxis.formatSpan(5.0))
         assertEquals("30 s", TimeAxis.formatSpan(30.0))
         assertEquals("40 s", TimeAxis.formatSpan(40.0))
+        assertEquals("5 min", TimeAxis.formatSpan(300.0))
+        assertEquals("90 s", TimeAxis.formatSpan(90.0))
     }
 }

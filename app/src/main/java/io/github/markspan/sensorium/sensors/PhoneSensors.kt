@@ -190,8 +190,8 @@ object PhoneSensors {
         if (nominalRate <= 0) EVENT_WINDOW_SECONDS else previewCapacity(nominalRate) / nominalRate
 
     private const val PREVIEW_SECONDS = 5
-    private const val PREVIEW_EVENTS = 500
-    private const val EVENT_WINDOW_SECONDS = 30.0
+    private const val PREVIEW_EVENTS = 3000
+    private const val EVENT_WINDOW_SECONDS = 300.0
 
     fun keyOf(s: Sensor) = "${s.type}|${s.name}|${if (s.isWakeUpSensor) "w" else ""}"
 
