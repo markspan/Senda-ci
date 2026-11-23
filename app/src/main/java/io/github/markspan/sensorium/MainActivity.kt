@@ -98,6 +98,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var accRange: AutoCompleteTextView
 
     private lateinit var arrivalSwitch: MaterialSwitch
+    private lateinit var recordSwitch: MaterialSwitch
 
     private lateinit var streamButton: MaterialButton
     private var wasRunning = false
@@ -141,6 +142,7 @@ class MainActivity : AppCompatActivity() {
         accRate = findViewById(R.id.accRate)
         accRange = findViewById(R.id.accRange)
         arrivalSwitch = findViewById(R.id.arrivalSwitch)
+        recordSwitch = findViewById(R.id.recordSwitch)
         streamButton = findViewById(R.id.streamButton)
 
         deviceAdapter = DeviceAdapter()
@@ -270,6 +272,7 @@ class MainActivity : AppCompatActivity() {
 
         polarSwitch.isChecked = prefs.getBoolean("polar", false)
         arrivalSwitch.isChecked = prefs.getBoolean("arrivalStamps", false)
+        recordSwitch.isChecked = prefs.getBoolean("record", false)
         ecgSwitch.isChecked = prefs.getBoolean("ecg", true)
         accSwitch.isChecked = prefs.getBoolean("acc", true)
         setupDropdown(accRate, PmdCommand.ACC_SAMPLE_RATES, prefs.getInt("accRate", 200))
@@ -291,6 +294,7 @@ class MainActivity : AppCompatActivity() {
         putFloat("locationRate", locationRateValue().toFloat())
         putBoolean("polar", polarSwitch.isChecked)
         putBoolean("arrivalStamps", arrivalSwitch.isChecked)
+        putBoolean("record", recordSwitch.isChecked)
         putBoolean("ecg", ecgSwitch.isChecked)
         putBoolean("acc", accSwitch.isChecked)
         putInt("accRate", dropdownValue(accRate, 200))
@@ -521,6 +525,7 @@ class MainActivity : AppCompatActivity() {
             .putExtra(StreamService.EXTRA_LOCATION, location)
             .putExtra(StreamService.EXTRA_LOCATION_RATE, locationRateValue())
             .putExtra(StreamService.EXTRA_ARRIVAL_STAMPS, arrivalSwitch.isChecked)
+            .putExtra(StreamService.EXTRA_RECORD, recordSwitch.isChecked)
         if (device != null) {
             prefs.edit {
                 putString("lastAddress", device.address)
@@ -548,6 +553,7 @@ class MainActivity : AppCompatActivity() {
         wasRunning = s.running
         findViewById<TextView>(R.id.statusText).text = s.status
         findViewById<TextView>(R.id.detailText).text = buildList {
+            s.recordingFile?.let { add("Recording $it · ${StreamService.formatBytes(s.recordingBytes)}") }
             if (s.phoneSensors > 0) add("${s.phoneSensors} phone sensors · ${s.phoneSamples} samples")
             if (s.audio) add("Audio · ${s.audioSamples} samples")
             if (s.location) add("GPS · ${s.locationFixes} fixes · ${s.locationFix ?: "waiting for a fix…"}")
@@ -625,6 +631,7 @@ class MainActivity : AppCompatActivity() {
         accRange.isEnabled = idle && accSwitch.isChecked
         scanButton.isEnabled = idle
         arrivalSwitch.isEnabled = idle
+        recordSwitch.isEnabled = idle
         findViewById<TextView>(R.id.arrivalHint).setText(
             if (arrivalSwitch.isChecked) R.string.timestamps_arrival_hint else R.string.timestamps_measured_hint
         )

@@ -23,6 +23,7 @@ import io.github.markspan.sensorium.sensors.AudioStreamer
 import io.github.markspan.sensorium.sensors.LocationFormat
 import io.github.markspan.sensorium.sensors.LocationStreamer
 import io.github.markspan.sensorium.sensors.PhoneSensorStreamer
+import io.github.markspan.sensorium.xdf.XdfRecording
 
 /**
  * Foreground service that owns all LSL outlets (phone sensors, microphone, GPS, Polar H10), so
@@ -36,6 +37,7 @@ class StreamService : Service() {
     private var location: LocationStreamer? = null
     private var polar: PolarStreamer? = null
     private var running = false
+    private var recordingErrorShown = false
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
@@ -59,6 +61,7 @@ class StreamService : Service() {
         val polarAddress = intent.getStringExtra(EXTRA_POLAR_ADDRESS)
         val arrivalStamps = intent.getBooleanExtra(EXTRA_ARRIVAL_STAMPS, false)
         val withLocation = intent.getBooleanExtra(EXTRA_LOCATION, false)
+        val record = intent.getBooleanExtra(EXTRA_RECORD, false)
 
         running = true
         goForeground(withMicrophone = audioRate > 0, withLocation = withLocation)
@@ -66,6 +69,14 @@ class StreamService : Service() {
         StreamState.reset()
         StreamState.update {
             StreamUiState(running = true, status = "Starting…", audio = audioRate > 0)
+        }
+        // Before any outlet exists: every outlet joins the recording when it is created.
+        recordingErrorShown = false
+        if (record) try {
+            val file = XdfRecording.start(this, deviceName)
+            StreamState.update { it.copy(recordingFile = file.name) }
+        } catch (e: Exception) {
+            StreamState.message("Recording: ${e.message}")
         }
 
         try {
@@ -138,7 +149,13 @@ class StreamService : Service() {
                     outlets = outlets,
                     phoneSamples = StreamState.phoneSamples.get(),
                     audioSamples = StreamState.audioSamples.get(),
+                    recordingBytes = XdfRecording.bytesWritten,
                 )
+            }
+            val error = XdfRecording.error
+            if (error != null && !recordingErrorShown) {
+                recordingErrorShown = true
+                StreamState.message("Recording stopped: ${error.message}")
             }
             main.postDelayed(this, 1000)
         }
@@ -151,12 +168,36 @@ class StreamService : Service() {
         audio?.stop(); audio = null
         location?.stop(); location = null
         polar?.stop(); polar = null
+        finishRecording()
         releaseLocks()
         StreamState.update {
             it.copy(running = false, status = "Stopped", outlets = emptyList(), polarStreaming = false)
         }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /**
+     * Completes the XDF file and moves it to Download/Sensorium, on a background thread: the
+     * last chunks and the copy can take a moment for long recordings.
+     */
+    private fun finishRecording() {
+        // Detached here, so a new streaming session started meanwhile records to its own file.
+        val recorder = XdfRecording.detach() ?: return
+        val app = applicationContext
+        Thread({
+            recorder.close()
+            val size = recorder.bytesWritten
+            val where = try {
+                XdfRecording.publish(app, recorder.file)
+            } catch (e: Exception) {
+                StreamState.message("Could not move the recording to Downloads: ${e.message}")
+                recorder.file.absolutePath
+            }
+            val damaged = recorder.error?.let { " (incomplete: ${it.message})" }.orEmpty()
+            StreamState.message("Saved $where · ${formatBytes(size)}$damaged")
+            StreamState.update { s -> s.copy(recordingFile = s.recordingFile.takeIf { it != recorder.file.name }) }
+        }, "sensorium-xdf-finish").start()
     }
 
     override fun onDestroy() {
@@ -188,6 +229,7 @@ class StreamService : Service() {
             if (s.phoneSensors > 0) add("${s.phoneSensors} sensors")
             if (s.audio) add("audio")
             if (s.location) add("GPS")
+            if (s.recordingFile != null) add("recording")
             s.polarDevice?.let { add("H10: ${s.polarStatus ?: "…"}") }
         }.joinToString(" · ").ifEmpty { "Starting…" } +
             LanAddresses.list().takeIf { it.isNotEmpty() }
@@ -268,6 +310,14 @@ class StreamService : Service() {
         const val EXTRA_ACC_RANGE = "accRange"
         /** Stamp phone sensors and audio on arrival in the app, as SENDA does. */
         const val EXTRA_ARRIVAL_STAMPS = "arrivalStamps"
+        /** Also record all streams to an XDF file on the phone. */
+        const val EXTRA_RECORD = "record"
+
+        fun formatBytes(bytes: Long): String = when {
+            bytes >= 1_000_000_000 -> String.format(java.util.Locale.ROOT, "%.2f GB", bytes / 1e9)
+            bytes >= 1_000_000 -> String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1e6)
+            else -> String.format(java.util.Locale.ROOT, "%.0f kB", bytes / 1e3)
+        }
 
         private const val CHANNEL_ID = "streaming"
         private const val NOTIFICATION_ID = 1

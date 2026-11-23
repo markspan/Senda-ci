@@ -1,5 +1,7 @@
 package io.github.markspan.sensorium.lsl
 
+import io.github.markspan.sensorium.xdf.XdfRecording
+import io.github.markspan.sensorium.xdf.XdfStreamInfo
 import java.io.Closeable
 
 /** JNI bindings to liblsl, implemented in `src/main/cpp/lsl_jni.cpp`. */
@@ -75,6 +77,14 @@ class LslOutlet(
 
     init {
         check(handle != 0L) { "Could not create LSL outlet '$name'" }
+        // A recording on the phone gets the same stream, meta-data and time stamps.
+        XdfRecording.register(
+            this,
+            XdfStreamInfo(
+                name, type, channelCount, nominalRate, sourceId, channelLabels, channelUnits,
+                channelType, manufacturer, model, timestamps,
+            ),
+        )
     }
 
     /**
@@ -85,7 +95,11 @@ class LslOutlet(
     @Synchronized
     fun pushChunk(data: FloatArray, lastTimestamp: Double = 0.0) {
         val h = handle
-        if (h != 0L && data.isNotEmpty()) LslNative.pushChunk(h, data, lastTimestamp)
+        if (h == 0L || data.isEmpty()) return
+        // Taken here rather than in liblsl, so the recording gets the very same time stamp.
+        val ts = if (lastTimestamp == 0.0) LslNative.localClock() else lastTimestamp
+        LslNative.pushChunk(h, data, ts)
+        XdfRecording.samples(this, data, channelCount, ts)
     }
 
     /** [pushChunk] stamped at push time. */
@@ -95,7 +109,9 @@ class LslOutlet(
     @Synchronized
     fun push(sample: FloatArray, timestamp: Double) {
         val h = handle
-        if (h != 0L && sample.isNotEmpty()) LslNative.pushSample(h, sample, timestamp)
+        if (h == 0L || sample.isEmpty()) return
+        LslNative.pushSample(h, sample, timestamp)
+        XdfRecording.samples(this, sample, channelCount, timestamp)
     }
 
     val hasConsumers: Boolean

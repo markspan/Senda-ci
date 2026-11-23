@@ -2,8 +2,8 @@
 
 **Sensorium** streams the sensors of an Android phone, its microphone and a **Polar H10** chest
 strap to **[Lab Streaming Layer (LSL)](https://labstreaminglayer.org)**. Record the streams with
-LabRecorder (or any other LSL consumer, such as OpenViBE) on a computer on the same network, or on
-the phone itself with [RECORDA](https://github.com/NeuropsyOL/RECORDA).
+LabRecorder (or any other LSL consumer, such as OpenViBE) on a computer on the same network, or
+save them on the phone itself as an XDF file (see [Recording on the phone](#recording-on-the-phone-xdf)).
 
 <p align="center">
   <img src="docs/screenshots/sensors.png" width="240" alt="Phone sensor list">
@@ -205,7 +205,7 @@ Download `Sensorium-<version>-release.apk` from the
 Copy it to the phone and open it (allow "install unknown apps"), or:
 
 ```bash
-adb install -r Sensorium-1.3.0-release.apk
+adb install -r Sensorium-1.4.0-release.apk
 ```
 
 Requires Android 8.0 (API 26) or newer. Bluetooth LE is only needed for the Polar H10.
@@ -220,11 +220,41 @@ old SENDA instead of replacing it.
 3. For a Polar H10: moisten the electrodes and put the strap on (it only advertises while worn),
    switch on **Polar H10**, tap **Scan** and select the strap. Choose ECG and/or the
    accelerometer (with its rate and range).
-4. Tap **Start streaming** and grant the permissions asked for.
-5. On the recording computer, on the same Wi-Fi or LAN, open LabRecorder and press *Update*:
+4. Optionally switch on **Save an XDF file on this phone** (see below).
+5. Tap **Start streaming** and grant the permissions asked for.
+6. On the recording computer, on the same Wi-Fi or LAN, open LabRecorder and press *Update*:
    the streams appear.
 
 Your choices are remembered for next time.
+
+### Recording on the phone (XDF)
+
+With **Save an XDF file on this phone** (Recording card) on, Sensorium writes every stream it
+sends into one [XDF](https://github.com/sccn/xdf/wiki/Specifications) file while it streams: the
+format LabRecorder writes, which pyxdf, xdf-Matlab, MNE, EEGLAB and SigViewer read. No computer
+or network is needed; LSL streaming goes on as usual, so LabRecorder can record at the same time.
+
+- **Same data as LSL**: each outlet passes exactly what it pushes, with the same time stamps,
+  to the file, and the stream headers carry the same meta-data (channel labels and units,
+  `<acquisition><timestamps>`). Time stamps are stored as 64-bit doubles.
+- **LabRecorder layout**: a header per stream, sample chunks, clock offsets every 5 s, boundary
+  chunks every 10 s, and a footer per stream (first and last time stamp, sample count, clock
+  offsets). All streams share the phone's LSL clock, so the clock offsets are 0 and loading
+  with `synchronize_clocks` changes nothing. Dejittering works as for LabRecorder files.
+- **Crash-safe**: the file is forced to storage every 10 s. If the phone crashes or runs out of
+  battery, the file is complete up to then and readers load it without the footers (pyxdf
+  recovers every sample before the break).
+- **Where**: the file is named `Sensorium_<date>_<time>.xdf`. While recording it is in the app's
+  own folder; when streaming stops it moves to **Download/Sensorium** (Android 10 and later),
+  where a file manager or a computer over USB finds it. On Android 8 and 9 it stays in
+  `Android/data/io.github.markspan.sensorium/files/recordings`. The Status card shows the file
+  and its size while recording, and where it was saved afterwards.
+- **Size**: about 4 bytes per value plus a little overhead: an hour of 48 kHz audio is about
+  0.7 GB; an hour of a 3-axis phone sensor at 100 Hz about 11 MB, as each sensor event is
+  stored with its own time stamp.
+
+The file was checked with pyxdf 1.18: it loads with and without clock synchronisation and
+dejittering, without warnings, with the expected values, time stamps and meta-data.
 
 ### While streaming
 

@@ -47,6 +47,11 @@
     <string name="bluetooth_off">Bluetooth is turned off</string>
     <string name="enable_bluetooth">Turn on</string>
 
+    <!-- Recording -->
+    <string name="recording">Recording</string>
+    <string name="record_xdf">Save an XDF file on this phone</string>
+    <string name="record_hint">Records every stream Sensorium sends, with the same time stamps and meta-data, into one XDF file (as LabRecorder writes). It is saved in Download/Sensorium when streaming stops. LSL streaming continues as usual.</string>
+
     <!-- Streaming -->
     <string name="start_streaming">Start streaming</string>
     <string name="stop_streaming">Stop streaming</string>

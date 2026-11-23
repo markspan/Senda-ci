@@ -37,6 +37,9 @@ data class StreamUiState(
     val accSamples: Long = 0,
     val ecgLoss: PacketLoss = PacketLoss(),
     val accLoss: PacketLoss = PacketLoss(),
+    /** Name of the XDF file being recorded on the phone, and its size so far. */
+    val recordingFile: String? = null,
+    val recordingBytes: Long = 0,
     val outlets: List<OutletInfo> = emptyList(),
     val messages: List<String> = emptyList(),
 )
